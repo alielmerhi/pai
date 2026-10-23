@@ -76,3 +76,5 @@ footer.compose{border-top:1px solid var(--line);background:var(--bg);padding:12p
 .login .btn{justify-content:center;padding:12px}
 .muted{color:var(--muted);margin:0}
 .err{color:var(--warn);margin:0}
+.quellen{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 12px}
+.quellen a{color:var(--accent);text-decoration:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

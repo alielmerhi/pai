@@ -27,7 +27,13 @@ ABLÄUFE:
 - "Merk dir", "ab jetzt" → regel_setzen bei fester Einstellung, sonst regel_merken. Bestätige in einem Satz, was ab jetzt gilt.
 - Abschluss mit variabler Provision (z. B. PV) → nachfragen, nie schätzen.
 - "Kontakt", "vCard" → kontaktkarte.
-- Fehlt eine Information für einen Schritt, frag gezielt nach.`;
+- Fehlt eine Information für einen Schritt, frag gezielt nach.
+
+INTERNET (web_search):
+- Nutze die Websuche für aktuelle Fakten, die sich ändern: Förderprogramme und Merkblätter (BAFA, KfW), Strom- und Gaspreise, Einspeisevergütung, Produkt- und Herstellerdaten, Firmen, Nachrichten.
+- Nenne bei Fakten aus dem Netz kurz die Quelle. Bei widersprüchlichen Quellen: sag das.
+- Websuche ändert nie die Rechnung: Förderbeträge kommen weiter nur aus foerderung_berechnen. Weicht eine Quelle von der Regelversion ab, weise darauf hin und rechne nicht selbst.
+- Datenschutz: Niemals Kundendaten (Namen, Adressen, Telefonnummern, E-Mails) in Suchanfragen. Suche nur allgemein, z. B. „PLZ 16816 Netzbetreiber“ statt mit Kundennamen.`;
 
 // Veränderlicher Teil, im Gerät gebaut: jetzt, Regeln, Kurzindex.
 export function kontext(S: State, now = new Date()) {

@@ -7,7 +7,7 @@ import { kontext } from '@/lib/prompt';
 import { demoState, BEISPIEL_MAIL } from '@/lib/demo';
 import { ft, fdl } from '@/lib/zeit';
 
-type UiMsg = { role: 'user' | 'ai'; text: string; acts: { t: string; err?: boolean }[]; cards: Card[]; starts?: boolean; busy?: boolean };
+type UiMsg = { role: 'user' | 'ai'; text: string; acts: { t: string; err?: boolean }[]; cards: Card[]; quellen?: { url: string; titel: string }[]; starts?: boolean; busy?: boolean };
 type ApiMsg = { role: 'user' | 'assistant'; content: any };
 const MKEY = 'pai-ui-v1', AKEY = 'pai-api-v1';
 
@@ -27,6 +27,17 @@ function kuerzen(m: ApiMsg[], max = 40): ApiMsg[] {
   if (m.length <= max) return m;
   for (let i = m.length - max; i < m.length; i++) if (m[i].role === 'user' && typeof m[i].content === 'string') return m.slice(i);
   return m.slice(-2);
+}
+
+// Abgeschlossene Runden schlank halten: Websuche-Ergebnisse sind groß und werden später nicht mehr gebraucht.
+function verdichten(m: ApiMsg[]): ApiMsg[] {
+  return m.map(x => {
+    if (x.role !== 'assistant' || !Array.isArray(x.content)) return x;
+    if (!x.content.some((b: any) => b.type === 'server_tool_use' || b.type === 'web_search_tool_result' || b.citations)) return x;
+    const c = x.content.filter((b: any) => b.type !== 'server_tool_use' && b.type !== 'web_search_tool_result')
+      .map((b: any) => (b.type === 'text' && b.citations ? { type: 'text', text: b.text } : b));
+    return { ...x, content: c.length ? c : [{ type: 'text', text: '(Websuche)' }] };
+  });
 }
 
 export default function Chat() {
@@ -68,8 +79,15 @@ export default function Chat() {
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || 'Fehler');
         verlauf = [...verlauf, { role: 'assistant', content: d.content }];
-        const texte = d.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
+        const texte = d.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('').trim();
         if (texte) cur.text = texte;
+        for (const b of d.content) {
+          if (b.type === 'server_tool_use' && b.name === 'web_search') cur.acts.push({ t: `Im Internet gesucht: ${b.input?.query || ''}` });
+          if (b.type === 'web_search_tool_result' && !Array.isArray(b.content)) cur.acts.push({ t: 'Websuche fehlgeschlagen', err: true });
+          if (b.type === 'text' && Array.isArray(b.citations)) for (const c of b.citations) if (c.url && !(cur.quellen ||= []).some(q => q.url === c.url)) cur.quellen!.push({ url: c.url, titel: c.title || c.url });
+        }
+        upd();
+        if (d.stop_reason === 'pause_turn') continue; // lange Websuche: unverändert zurückschicken
         const calls = d.content.filter((b: any) => b.type === 'tool_use');
         if (d.stop_reason !== 'tool_use' || !calls.length) break;
         const results = calls.map((c: any) => {
@@ -86,7 +104,7 @@ export default function Chat() {
         speichern(S); upd();
         verlauf = [...verlauf, { role: 'user', content: results }];
       }
-      api.current = verlauf;
+      api.current = verdichten(verlauf);
     } catch (e: any) {
       cur.text = `Das hat nicht geklappt: ${e.message}`; cur.acts.push({ t: 'Keine Verbindung zur KI', err: true });
       // Verlauf auf den Stand vor dieser Nachricht zurücksetzen (keine halben Werkzeug-Paare); Aktionen bleiben in der Akte
@@ -119,6 +137,7 @@ export default function Chat() {
               {m.acts.length > 0 && <ul className="acts">{m.acts.map((a, j) => <li key={j} className={a.err ? 'err' : ''}>{a.t}</li>)}</ul>}
               {m.busy && !m.text && <div className="thinking" aria-label="PAI denkt"><span>·</span><span>·</span><span>·</span></div>}
               {m.text && <div className="txt">{m.text}</div>}
+              {m.quellen && m.quellen.length > 0 && <div className="quellen">Quellen: {m.quellen.slice(0, 6).map((q, j) => <a key={j} href={q.url} target="_blank" rel="noopener noreferrer">{q.titel}</a>)}</div>}
               {m.cards.map((c, j) => c.type === 'mail' ? <MailKarte key={j} c={c} zeige={zeige} /> : <KontaktKarte key={j} c={c} zeige={zeige} />)}
               {m.starts && <div className="starts">{STARTS.map(s => <button key={s} onClick={() => senden(s)}>{s}</button>)}</div>}
             </div>)}
