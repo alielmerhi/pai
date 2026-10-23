@@ -81,6 +81,16 @@ export default function Chat() {
 
   const zeige = (t: string) => { setToast(t); setTimeout(() => setToast(''), 3500); };
 
+  // Neue Version erkennen (Startbildschirm-App lädt sonst die alte weiter)
+  const [neu, setNeu] = useState(false);
+  useEffect(() => {
+    const pruefe = () => fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(d => { if (d.v && d.v !== process.env.NEXT_PUBLIC_VERSION) setNeu(true); }).catch(() => {});
+    pruefe(); const t = setInterval(pruefe, 120000);
+    const sicht = () => { if (document.visibilityState === 'visible') pruefe(); };
+    document.addEventListener('visibilitychange', sicht);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', sicht); };
+  }, []);
+
   async function senden(text: string) {
     if (!S || busy || !text.trim()) return;
     if (text === 'Beispiel-Lead einfügen') text = BEISPIEL_MAIL;
@@ -173,8 +183,9 @@ export default function Chat() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
           </button>
         </form>
-        <p className="note">Nur Testdaten. PAI sendet keine Mails – das machst du.</p>
+        <p className="note">Nur Testdaten. PAI sendet keine Mails – das machst du. <span className="ver">Version {process.env.NEXT_PUBLIC_VERSION}</span></p>
       </div></footer>
+      {neu && <button className="update" onClick={() => location.reload()}>Neue Version da – tippen zum Laden</button>}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );
