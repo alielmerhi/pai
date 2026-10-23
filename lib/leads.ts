@@ -89,23 +89,24 @@ export function pflichtFehlt(l: Lead): string[] {
   if (['gas', 'biomasse'].includes(l.heizung.art) && !l.heizung.einbau) m.push('Einbaujahr Heizung');
   return m;
 }
-export function fragenFuersTelefonat(l: Lead): string[] {
-  const f: string[] = [];
-  const junge = ['gas', 'biomasse'].includes(l.heizung.art) && l.heizung.einbau && new Date().getFullYear() - l.heizung.einbau < 20;
-  if (junge) f.push('Warum jetzt wechseln? (Heizung ist unter 20 Jahre)');
-  if (l.produkte.includes('WP')) {
-    f.push(l.heizung.art === 'oel' ? 'Ölverbrauch pro Jahr (Liter)?' : ['gas', 'gasetage'].includes(l.heizung.art) ? 'Gasverbrauch pro Jahr (kWh oder m³)?' : 'Wärmeverbrauch pro Jahr?');
-    f.push('Einbaujahr der Heizung, läuft sie noch?');
-    f.push('Fußbodenheizung oder Heizkörper?');
-    f.push('Stromverbrauch pro Jahr, PV vorhanden?');
-    if (!l.heizung.standort) f.push('Wo steht die Heizung?');
-    if (l.objekt.baujahr && l.objekt.baujahr < 1995) f.push('Saniert? Fenster, Dämmung, Dach');
-    f.push('Eigentümer laut Grundbuch, selbst bewohnt, wie viele Wohneinheiten?');
-    f.push('Minderjährige Kinder im Haushalt?');
+// Fragen aus dem Schema des Nutzers – nur, was noch nicht bekannt ist.
+const NUR_WP = ['heizung', 'verbrauch', 'verteilung', 'einkommen'];
+export function frageBekannt(l: Lead, key: string): boolean {
+  switch (key) {
+    case 'heizung': return l.heizung.art !== 'unbekannt' && !!l.heizung.einbau && !!l.heizung.standort;
+    case 'verbrauch': return !!l.heizung.verbrauch;
+    case 'verteilung': return !!l.heizung.verteilung;
+    case 'gebaeude': return !!l.objekt.flaeche && !!l.objekt.baujahr && l.objekt.baujahr >= 2002;
+    case 'strom': return !!l.strom;
+    case 'eigentum': return l.eigentum.selbst != null && l.objekt.we != null;
+    case 'einkommen': return l.zve != null && l.kind != null;
+    case 'entscheider': return !!l.entscheider;
+    default: return false; // motivation und eigene Fragen immer
   }
-  if (l.produkte.includes('PV')) f.push('Dach: Ausrichtung, Neigung, Eindeckung, Alter, Verschattung?');
-  f.push('Wer entscheidet mit?');
-  return f;
+}
+export function fragenFuersTelefonat(l: Lead, fragen: { key: string; text: string }[]): string[] {
+  const wp = l.produkte.includes('WP');
+  return fragen.filter(f => (wp || !NUR_WP.includes(f.key)) && !frageBekannt(l, f.key)).map(f => f.text);
 }
 
 export function findeDublette(S: State, i: { telefon?: string; email?: string; nachname?: string; plz?: string; strasse?: string }): Lead | null {

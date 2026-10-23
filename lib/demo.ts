@@ -5,7 +5,9 @@ import { addWerktage, localIso, at } from './zeit';
 
 export function demoState(now = new Date()): State {
   const S = leererState();
-  const c: Ctx = { S, acts: [], cards: [], now };
+  // PLZ-Mittelpunkte der Demo-Orte, damit die Demo auch ohne Geodienst Fahrzeiten kennt
+  const geo = { '16540': { lat: 52.6745, lon: 13.2876 }, '16816': { lat: 52.9258, lon: 12.8043 }, '16515': { lat: 52.7545, lon: 13.2369 }, '14469': { lat: 52.4256, lon: 13.0347 } };
+  const c: Ctx = { S, acts: [], cards: [], now, geo };
   const run = (n: string, i: any) => { try { ausfuehren(n, i, c); } catch { /* Demo darf nie am Start scheitern */ } };
   run('lead_anlegen', { anrede: 'Herr', vorname: 'Matthias', nachname: 'Brenner', strasse: 'Birkenallee 7', plz: '16540', ort: 'Hohen Neuendorf', telefon: '0151 000 01 01', email: 'm.brenner@example.com', quelle: 'WattFox', produkte: ['WP'], gebaeude: 'EFH', baujahr_haus: 1978, wohnflaeche: 145, heizungsart: 'oel', heizung_einbaujahr: 1998, eigentuemer: true, selbstgenutzt: true, wohneinheiten: 1 });
   run('anruf_ergebnis', { lead: '1', ergebnis: 'erreicht', notiz: 'Frau entscheidet mit' });

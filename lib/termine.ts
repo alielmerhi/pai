@@ -1,6 +1,6 @@
 import { State, Lead, fullName, nrS, addTL, logP } from './state';
 import { at, hm, roundUp, sameDay, sod, isWerktag, feiertag, fd, ft, fdl, localIso, minOfDay } from './zeit';
-import { richtung, vertraeglich } from './region';
+import { richtungVon, tagVertraeglich, fahrMin } from './region';
 
 const MIN = 60000;
 
@@ -50,50 +50,64 @@ export function terminTagErlaubt(S: State, d: Date) {
   const w = d.getDay(); if (w === 0 || feiertag(d)) return false;
   if (w === 6) return S.regeln.samstag; return !S.regeln.freieTage.includes(w);
 }
-function frei(start: number, dur: number, buf: number, bel: Belegung[]) {
-  const e = start + dur; return bel.every(x => e + buf <= x.a || start >= x.b + buf);
+// Abstand zwischen zwei Terminen: Puffer laut Regel, aber nie weniger als die Fahrzeit
+const abstand = (buf: number, a: Lead, b: Lead) => Math.max(buf, a.geo && b.geo ? fahrMin(a.geo, b.geo) * MIN : 0);
+function frei(start: number, dur: number, buf: number, bel: Belegung[], l?: Lead) {
+  const e = start + dur; return bel.every(x => { const g = l ? abstand(buf, l, x.lead) : buf; return e + g <= x.a || start >= x.b + g; });
 }
 
 export type Vorschlag = { start: Date; grund: string; score: number };
 
-export function termineVorschlagen(S: State, l: Lead, now = new Date(), tageVoraus = 15): Vorschlag[] {
+export function termineVorschlagen(S: State, l: Lead, now = new Date(), opt: { anzahl?: number; ohneTage?: Date[] } = {}, tageVoraus = 15): Vorschlag[] {
   abgelaufeneAngeboteEntfernen(S, now);
   const r = S.regeln, dur = r.terminDauer * MIN, buf = r.puffer * MIN;
+  const anzahl = Math.max(1, Math.min(6, opt.anzahl || r.anzahlVorschlaege || 2));
   const [sh, sm] = hm(r.terminStart), [eh, em] = hm(r.terminEnde);
   const kAb = l.erreichbar.ab ? hm(l.erreichbar.ab) : null;
   const vonMin = Math.max(sh * 60 + sm, kAb ? kAb[0] * 60 + kAb[1] : 0);
-  const myDir = richtung(l.plz);
+  const myDir = richtungVon(l);
   const kandidaten: Vorschlag[] = [];
   const d = sod(now);
   for (let i = 0; i < tageVoraus; i++) {
     d.setDate(d.getDate() + 1);
     if (!terminTagErlaubt(S, d)) continue;
+    if ((opt.ohneTage || []).some(t => sameDay(t, d))) continue;
     const bel = belegungen(S, l.id, d);
-    if (r.richtung !== 'aus' && bel.some(x => !vertraeglich(myDir, richtung(x.lead.plz), r.richtung === 'streng'))) continue;
+    // Nie zwei Termine in entgegengesetzten Richtungen am selben Tag
+    if (r.richtung !== 'aus' && bel.some(x => !tagVertraeglich(l, x.lead, r.richtung === 'streng'))) continue;
     let best: Vorschlag | null = null;
     for (let m = vonMin; m * MIN + dur <= (eh * 60 + em) * MIN; m += 30) {
       const s = +at(d, Math.floor(m / 60), m % 60);
-      if (!frei(s, dur, buf, bel)) continue;
-      let score = 1, grund = 'Freier Tag – Tour kann um diesen Termin gebaut werden';
+      if (!frei(s, dur, buf, bel, l)) continue;
+      let score = 1, grund = 'Tag noch frei – Tour ' + (myDir === 'Berlin' ? 'in Berlin' : 'Richtung ' + myDir) + ' möglich';
       if (bel.length) {
-        const gleich = bel.some(x => richtung(x.lead.plz) === myDir);
-        score = gleich ? 3 : 2;
-        const nb = bel.reduce((p, x) => Math.min(p, Math.abs(s - (x.b + buf)), Math.abs(x.a - (s + dur + buf))), Infinity);
-        score += nb <= 30 * MIN ? 1 : 0; // direkt anschließend
-        const nah = bel.slice().sort((p, q) => Math.min(Math.abs(s - p.b), Math.abs(p.a - s)) - Math.min(Math.abs(s - q.b), Math.abs(q.a - s)))[0];
-        grund = `${s < nah.a ? 'Vor' : 'Nach'} ${nah.lead.nachname} (${nah.lead.ort}) – ${gleich ? 'gleiche Richtung' : 'benachbarte Richtung'}`;
+        // nächster Nachbartermin (davor oder danach)
+        const nah = bel.slice().sort((p, q) => Math.min(Math.abs(s - p.b), Math.abs(p.a - (s + dur))) - Math.min(Math.abs(s - q.b), Math.abs(q.a - (s + dur))))[0];
+        const fz = l.geo && nah.lead.geo ? fahrMin(l.geo, nah.lead.geo) : null;
+        const gleich = richtungVon(nah.lead) === myDir;
+        score = 2 + (gleich ? 1 : 0) + (fz != null && fz <= 30 ? 1 : 0);
+        const luecke = s >= nah.b ? s - nah.b : nah.a - (s + dur);
+        score += luecke <= Math.max(buf, (fz || 0) * MIN) + 30 * MIN ? 1 : 0; // direkt anschließend
+        grund = `${s >= nah.b ? 'nach' : 'vor'} ${nah.lead.nachname} in ${nah.lead.ort}${fz != null ? `, ca. ${fz} Min. Fahrt` : ''}${nah.art === 'angeboten' ? ' (dort nur angeboten)' : ''}`;
       }
       if (!best || score > best.score) best = { start: new Date(s), grund, score };
     }
     if (best) kandidaten.push(best);
   }
   kandidaten.sort((a, b) => b.score - a.score || +a.start - +b.start);
-  return kandidaten.slice(0, 2).sort((a, b) => +a.start - +b.start);
+  return kandidaten.slice(0, anzahl).sort((a, b) => +a.start - +b.start);
+}
+
+// Bereits gebuchte Termine in der Nähe (für Auffälligkeiten)
+export function termineInDerNaehe(S: State, l: Lead, now = new Date(), maxMin = 30) {
+  if (!l.geo) return [];
+  return S.leads.filter(x => x.id !== l.id && x.termin && x.geo && new Date(x.termin.start) > now && fahrMin(l.geo!, x.geo!) <= maxMin)
+    .map(x => `${x.nachname} in ${x.ort} (${fd(x.termin!.start)} ${ft(x.termin!.start)}, ca. ${fahrMin(l.geo!, x.geo!)} Min.)`);
 }
 
 // Angebotene Slots reservieren – kein Slot wird zweimal angeboten
-export function reservieren(S: State, l: Lead, v: Vorschlag[], now = new Date()) {
-  S.slots = S.slots.filter(s => s.leadId !== l.id);
+export function reservieren(S: State, l: Lead, v: Vorschlag[], now = new Date(), zusaetzlich = false) {
+  if (!zusaetzlich) S.slots = S.slots.filter(s => s.leadId !== l.id);
   const ablauf = new Date(+now + S.regeln.angebotGueltigStunden * 3600000).toISOString();
   for (const x of v) S.slots.push({ start: x.start.toISOString(), leadId: l.id, ablauf });
   return ablauf;
@@ -106,9 +120,10 @@ export function terminBuchen(S: State, l: Lead, start: Date, now = new Date()) {
   if (!terminTagErlaubt(S, start)) throw new Error(`${fdl(start)} ist laut Regeln kein Termintag${feiertag(start) ? ' (' + feiertag(start) + ')' : ''}`);
   abgelaufeneAngeboteEntfernen(S, now);
   const bel = belegungen(S, l.id, start);
-  const clash = bel.find(x => !frei(+start, dur, buf, [x]));
-  if (clash) throw new Error(`Überschneidung mit ${fullName(clash.lead)} (${ft(clash.a)} in ${clash.lead.ort}, ${clash.art})`);
+  const clash = bel.find(x => !frei(+start, dur, buf, [x], l));
+  if (clash) throw new Error(`Zu knapp oder Überschneidung mit ${fullName(clash.lead)} (${ft(clash.a)} in ${clash.lead.ort}, ${clash.art}${l.geo && clash.lead.geo ? `, ca. ${fahrMin(l.geo, clash.lead.geo)} Min. Fahrt` : ''})`);
   const warn: string[] = [];
+  if (S.regeln.richtung !== 'aus') { const gegen = bel.filter(x => x.art === 'gebucht' && !tagVertraeglich(l, x.lead, S.regeln.richtung === 'streng')); if (gegen.length) warn.push(`Am selben Tag in anderer Richtung: ${gegen.map(x => x.lead.ort).join(', ')} – Route prüfen.`); }
   const [sh, sm] = hm(r.terminStart);
   if (minOfDay(start) < sh * 60 + sm) warn.push(`Beginn vor ${r.terminStart} Uhr – entgegen deiner Regel.`);
   const wechsel = !!l.termin;
@@ -125,4 +140,15 @@ export function terminBuchen(S: State, l: Lead, start: Date, now = new Date()) {
 export function angeboteUebersicht(S: State, now = new Date()) {
   abgelaufeneAngeboteEntfernen(S, now);
   return S.slots.map(s => { const l = S.leads.find(x => x.id === s.leadId)!; return { start: localIso(s.start), anzeige: fd(s.start) + ' ' + ft(s.start), lead: nrS(l), name: fullName(l), gueltig_bis: fd(s.ablauf) + ' ' + ft(s.ablauf) }; });
+}
+
+// Sind die angebotenen Slots eines Leads noch gültig (frei, Richtung passt)?
+export function angeboteFuer(S: State, l: Lead, now = new Date()) {
+  abgelaufeneAngeboteEntfernen(S, now);
+  const r = S.regeln, dur = r.terminDauer * MIN, buf = r.puffer * MIN;
+  return S.slots.filter(s => s.leadId === l.id).map(s => {
+    const st = new Date(s.start), bel = belegungen(S, l.id, st);
+    const ok = frei(+st, dur, buf, bel, l) && (r.richtung === 'aus' || bel.every(x => tagVertraeglich(l, x.lead, r.richtung === 'streng'))) && terminTagErlaubt(S, st);
+    return { start: st, ok };
+  });
 }

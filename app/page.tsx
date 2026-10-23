@@ -1,6 +1,9 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import qrcode from 'qrcode-generator';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { Geo } from '@/lib/region';
 import { State, laden, speichern } from '@/lib/state';
 import { ausfuehren, Card } from '@/lib/tools';
 import { kontext } from '@/lib/prompt';
@@ -9,7 +12,15 @@ import { ft, fdl } from '@/lib/zeit';
 
 type UiMsg = { role: 'user' | 'ai'; text: string; acts: { t: string; err?: boolean }[]; cards: Card[]; quellen?: { url: string; titel: string }[]; starts?: boolean; busy?: boolean };
 type ApiMsg = { role: 'user' | 'assistant'; content: any };
-const MKEY = 'pai-ui-v1', AKEY = 'pai-api-v1';
+const MKEY = 'pai-ui-v1', AKEY = 'pai-api-v1', GKEY = 'pai-geo-v1';
+
+// PLZ-Koordinaten im Gerät zwischenspeichern; übertragen wird nur die PLZ.
+let GEO: Record<string, Geo | null> = {};
+async function geoFuer(plz: unknown) {
+  const p = String(plz || '').replace(/\D/g, '');
+  if (p.length !== 5 || p in GEO) return;
+  try { const r = await fetch('/api/geo?plz=' + p); const d = await r.json(); if (r.ok) { GEO[p] = d.geo ?? null; localStorage.setItem(GKEY, JSON.stringify(GEO)); } } catch {}
+}
 
 const STARTS = ['Was steht heute an?', 'Beispiel-Lead einfügen', '0002 geht nicht ran', 'Merk dir: dienstags keine Termine', 'Wie steht meine Provision?'];
 
@@ -52,6 +63,7 @@ export default function Chat() {
   const ta = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    try { GEO = JSON.parse(localStorage.getItem(GKEY) || '{}'); } catch {}
     const s = laden() || demoState(); speichern(s); setS(s);
     try { api.current = JSON.parse(localStorage.getItem(AKEY) || '[]'); } catch { api.current = []; }
     let ui: UiMsg[] = []; try { ui = JSON.parse(localStorage.getItem(MKEY) || '[]'); } catch {}
@@ -64,7 +76,7 @@ export default function Chat() {
   async function senden(text: string) {
     if (!S || busy || !text.trim()) return;
     if (text === 'Beispiel-Lead einfügen') text = BEISPIEL_MAIL;
-    setInput(''); setBusy(true);
+    setInput(''); setBusy(true); S.zug = (S.zug || 0) + 1;
     const cur: UiMsg = { role: 'ai', text: '', acts: [], cards: [], busy: true };
     setMsgs(m => [...m.map(x => ({ ...x, starts: false })), { role: 'user', text, acts: [], cards: [] }, cur]);
     const upd = () => setMsgs(m => [...m.slice(0, -1), { ...cur }]);
@@ -90,8 +102,9 @@ export default function Chat() {
         if (d.stop_reason === 'pause_turn') continue; // lange Websuche: unverändert zurückschicken
         const calls = d.content.filter((b: any) => b.type === 'tool_use');
         if (d.stop_reason !== 'tool_use' || !calls.length) break;
+        for (const c of calls) if (c.input?.plz) await geoFuer(c.input.plz);
         const results = calls.map((c: any) => {
-          const ctx = { S, acts: [] as string[], cards: [] as Card[], now: new Date() };
+          const ctx = { S, acts: [] as string[], cards: [] as Card[], now: new Date(), zug: S.zug, geo: GEO };
           try {
             const out = ausfuehren(c.name, c.input || {}, ctx);
             cur.acts.push(...ctx.acts.map(t => ({ t }))); cur.cards.push(...ctx.cards);
@@ -136,9 +149,9 @@ export default function Chat() {
               <div className="who">PAI</div>
               {m.acts.length > 0 && <ul className="acts">{m.acts.map((a, j) => <li key={j} className={a.err ? 'err' : ''}>{a.t}</li>)}</ul>}
               {m.busy && !m.text && <div className="thinking" aria-label="PAI denkt"><span>·</span><span>·</span><span>·</span></div>}
-              {m.text && <div className="txt">{m.text}</div>}
+              {m.text && <div className="txt md"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ node, ...p }) => <a {...p} target="_blank" rel="noopener noreferrer" /> }}>{m.text}</ReactMarkdown></div>}
               {m.quellen && m.quellen.length > 0 && <div className="quellen">Quellen: {m.quellen.slice(0, 6).map((q, j) => <a key={j} href={q.url} target="_blank" rel="noopener noreferrer">{q.titel}</a>)}</div>}
-              {m.cards.map((c, j) => c.type === 'mail' ? <MailKarte key={j} c={c} zeige={zeige} /> : <KontaktKarte key={j} c={c} zeige={zeige} />)}
+              {m.cards.map((c, j) => c.type === 'mail' ? <MailKarte key={j} c={c} zeige={zeige} /> : c.type === 'ics' ? <KalenderKarte key={j} c={c} /> : <KontaktKarte key={j} c={c} zeige={zeige} />)}
               {m.starts && <div className="starts">{STARTS.map(s => <button key={s} onClick={() => senden(s)}>{s}</button>)}</div>}
             </div>)}
       </div></div></main>
@@ -202,6 +215,20 @@ function KontaktKarte({ c, zeige }: { c: Extract<Card, { type: 'vcard' }>; zeige
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+function KalenderKarte({ c }: { c: Extract<Card, { type: 'ics' }> }) {
+  return (
+    <div className="card">
+      <div className="to">Kalendereintrag</div>
+      <div className="subj">{c.titel}</div>
+      <div className="hint">Antippen öffnet „Zum Kalender hinzufügen“. Kalender (WP / PV / TGA) dort auswählen.</div>
+      <form method="POST" action="/api/ics" target="_blank">
+        <input type="hidden" name="ics" value={c.ics} /><input type="hidden" name="name" value={c.name} />
+        <div className="row"><button className="btn primary" type="submit">In Kalender eintragen</button></div>
+      </form>
     </div>
   );
 }

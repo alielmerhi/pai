@@ -148,6 +148,7 @@ export function foerderung(e: FoerderEingabe, now = new Date()) {
 
   return {
     regelversion: REGELN.version,
+    einschaetzung: einschaetzung(e, now),
     status: geprueft ? 'geprüft' : 'vorläufig – Voraussetzungen offen, KEINE Zahl an den Kunden',
     kosten_angenommen: eur(kosten) + (e.kosten ? '' : ' (Annahme)'),
     foerdersatz: geprueft ? `${max.satz} %` : `${min.satz}–${max.satz} %`,
@@ -161,4 +162,37 @@ export function foerderung(e: FoerderEingabe, now = new Date()) {
     zeitargument,
     _werte: { minSatz: min.satz, maxSatz: max.satz, minZuschuss: min.zuschuss, maxZuschuss: max.zuschuss, klima: max.klima },
   };
+}
+
+// Ein Satz für die Übersicht (intern für den Berater, nicht für Kunden): was sicher ist, woran der Rest hängt.
+const NAME: Record<string, string> = { oel: 'Öl', kohle: 'Kohle', nachtspeicher: 'Nachtspeicher', gasetage: 'Gas-Etage', gas: 'Gas', biomasse: 'Biomasse', fernwaerme: 'Fernwärme' };
+export function einschaetzung(e: FoerderEingabe, now = new Date()): string {
+  const antrag = e.antragsdatum || now, cap = hoechstkosten1(antrag), art = (e.heizungsart || 'unbekannt').toLowerCase();
+  const fmt = (p: number) => `${p} % = ${eur(cap * p / 100)}`;
+  if (e.neubau) return 'Neubau → keine BEG-Förderung.';
+  if (e.selbstgenutzt === false || e.eigentuemer === false) return `Nicht selbstgenutzt → nur Grundförderung ${fmt(REGELN.grund)}, keine Boni.`;
+  const k = klimaSatz(antrag), jahr = antrag.getFullYear();
+  let basis = REGELN.grund, teil = '';
+  if (REGELN.klimaHeizungenImmer.includes(art)) {
+    if (e.funktionstuechtig === false) teil = `${NAME[art]}, aber defekt → kein Klimabonus, ${fmt(basis)}`;
+    else { basis += k; teil = `${NAME[art]} → Klimabonus sicher: ${fmt(basis)}`; }
+  } else if (REGELN.klimaHeizungenAb20.includes(art)) {
+    if (!e.heizung_einbaujahr) teil = `${NAME[art]}, Einbaujahr offen → ${fmt(basis)} sicher, ab 20 Jahren ${fmt(basis + k)}`;
+    else {
+      const alter = jahr - e.heizung_einbaujahr;
+      if (alter >= 20 && e.funktionstuechtig !== false) { basis += k; teil = `${NAME[art]} ${e.heizung_einbaujahr} = ${alter} Jahre → Klimabonus: ${fmt(basis)}`; }
+      else teil = `${NAME[art]} ${e.heizung_einbaujahr} = ${alter} Jahre → kein Klimabonus, nur ${fmt(basis)} + Einkommensbonus`;
+    }
+  } else if (art === 'fernwaerme') teil = `Fernwärme → Klimabonus unklar (Sonderfall), sicher ${fmt(basis)}`;
+  else teil = `Heizungsart ${art === 'unbekannt' ? 'offen' : NAME[art] || art} → ${fmt(basis)} sicher`;
+  let eink = '';
+  if (e.zve != null) {
+    const z = e.zve - (e.minderjaehriges_kind ? REGELN.kindAbzug : 0), s = REGELN.einkommen.find(x => z <= x.bis)?.satz ?? 0;
+    const satz = Math.min(basis + s, s === REGELN.einkommen[0].satz ? REGELN.deckelHoechsteStufe : REGELN.deckel);
+    eink = s ? ` Mit Einkommensbonus ${s} %: ${fmt(satz)}.` : ' Kein Einkommensbonus (zvE über 50.000 €).';
+  } else {
+    const mit30 = Math.min(basis + 30, REGELN.deckel), mit40 = Math.min(basis + 40, REGELN.deckelHoechsteStufe);
+    eink = ` Mit Einkommensbonus bis ${mit30} %, bei zvE unter 30.000 € bis ${mit40} %.`;
+  }
+  return teil + '.' + eink;
 }
