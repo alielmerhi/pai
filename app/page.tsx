@@ -29,7 +29,7 @@ function begruessung(S: State): UiMsg {
   const anrufe = S.leads.filter(l => l.next?.typ === 'anruf' && new Date(l.next.ts).toDateString() === new Date().toDateString()).length;
   const mails = S.leads.filter(l => l.next?.typ === 'mail').length;
   return { role: 'ai', acts: [], cards: [], starts: true, text:
-    `${h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend'}, ${S.berater.name}. ${fdl(new Date())}, ${ft(new Date())} Uhr.\n\n` +
+    `${h >= 5 && h < 11 ? 'Guten Morgen' : h >= 11 && h < 18 ? 'Guten Tag' : 'Guten Abend'}, ${S.berater.name}. ${fdl(new Date())}, ${ft(new Date())} Uhr.\n\n` +
     `${S.leads.length} Testleads geladen${anrufe ? `, ${anrufe} Anruf${anrufe > 1 ? 'e' : ''} heute` : ''}${mails ? `, ${mails} Rückruf-Mail fällig` : ''}.\n\nFüg eine Lead-Mail ein, sag mir, wen du nicht erreicht hast, oder frag, was ansteht.` };
 }
 
@@ -69,14 +69,23 @@ export default function Chat() {
     let ui: UiMsg[] = []; try { ui = JSON.parse(localStorage.getItem(MKEY) || '[]'); } catch {}
     setMsgs(ui.length ? ui.map(m => ({ ...m, busy: false })) : [begruessung(s)]);
   }, []);
-  useEffect(() => { try { localStorage.setItem(MKEY, JSON.stringify(msgs.filter(m => !m.busy).slice(-60))); } catch {} feed.current?.scrollTo({ top: feed.current.scrollHeight, behavior: 'smooth' }); }, [msgs]);
+  const scrollZiel = useRef<'ende' | 'antwort' | null>('ende');
+  useEffect(() => {
+    try { localStorage.setItem(MKEY, JSON.stringify(msgs.filter(m => !m.busy).slice(-60))); } catch {}
+    const f = feed.current; if (!f || !scrollZiel.current) return;
+    if (scrollZiel.current === 'ende') { f.scrollTo({ top: f.scrollHeight, behavior: 'smooth' }); scrollZiel.current = null; return; }
+    // Lange Antworten von oben lesen: die eigene Nachricht bleibt knapp oben sichtbar
+    const el = f.querySelectorAll('.m-user'); const last = el[el.length - 1] as HTMLElement | undefined;
+    if (last) f.scrollTo({ top: Math.max(0, last.offsetTop - 12), behavior: 'smooth' });
+  }, [msgs]);
 
   const zeige = (t: string) => { setToast(t); setTimeout(() => setToast(''), 3500); };
 
   async function senden(text: string) {
     if (!S || busy || !text.trim()) return;
     if (text === 'Beispiel-Lead einfügen') text = BEISPIEL_MAIL;
-    setInput(''); setBusy(true); S.zug = (S.zug || 0) + 1;
+    setInput(''); setBusy(true); S.zug = (S.zug || 0) + 1; scrollZiel.current = 'antwort';
+    if (ta.current) ta.current.style.height = 'auto';
     const cur: UiMsg = { role: 'ai', text: '', acts: [], cards: [], busy: true };
     setMsgs(m => [...m.map(x => ({ ...x, starts: false })), { role: 'user', text, acts: [], cards: [] }, cur]);
     const upd = () => setMsgs(m => [...m.slice(0, -1), { ...cur }]);
@@ -123,7 +132,7 @@ export default function Chat() {
       // Verlauf auf den Stand vor dieser Nachricht zurücksetzen (keine halben Werkzeug-Paare); Aktionen bleiben in der Akte
       api.current = kuerzen(api.current);
     } finally {
-      cur.busy = false; upd(); speichern(S); setS({ ...S });
+      cur.busy = false; upd(); speichern(S); setS({ ...S }); scrollZiel.current = null;
       try { localStorage.setItem(AKEY, JSON.stringify(api.current)); } catch {}
       setBusy(false);
     }
@@ -139,14 +148,14 @@ export default function Chat() {
   return (
     <div className="chat">
       <header className="top"><div className="col">
-        <div className="mark">PA<i>I</i><small>dein Vertriebsmitarbeiter</small></div>
-        <div className="meta"><span>Testdaten</span><button onClick={neuStart}>{resetArm ? 'Wirklich? Nochmal tippen' : 'Neu starten'}</button></div>
+        <div className="mark">PA<i>I</i><span className="test">Testdaten</span></div>
+        <button className={'reset' + (resetArm ? ' arm' : '')} onClick={neuStart}>{resetArm ? 'Alles löschen? Nochmal tippen' : 'Neu starten'}</button>
       </div></header>
       <main className="feed" ref={feed}><div className="col"><div className="msgs">
         {msgs.map((m, i) => m.role === 'user'
-          ? <div key={i} className="m-user">{m.text}</div>
+          ? <UserNachricht key={i} text={m.text} />
           : <div key={i} className="m-ai">
-              <div className="who">PAI</div>
+              <div className="who">{S?.schema?.mitarbeiter || 'PAI'}</div>
               {m.acts.length > 0 && <ul className="acts">{m.acts.map((a, j) => <li key={j} className={a.err ? 'err' : ''}>{a.t}</li>)}</ul>}
               {m.busy && !m.text && <div className="thinking" aria-label="PAI denkt"><span>·</span><span>·</span><span>·</span></div>}
               {m.text && <div className="txt md"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ node, ...p }) => <a {...p} target="_blank" rel="noopener noreferrer" /> }}>{m.text}</ReactMarkdown></div>}
@@ -157,14 +166,14 @@ export default function Chat() {
       </div></div></main>
       <footer className="compose"><div className="col">
         <form className="box" onSubmit={e => { e.preventDefault(); senden(input); }}>
-          <textarea ref={ta} rows={1} value={input} placeholder="Schreib PAI – z. B. „0004 geht nicht ran“ oder Lead-Mail einfügen" aria-label="Nachricht an PAI"
+          <textarea ref={ta} rows={1} value={input} placeholder="Nachricht oder Lead-Mail" aria-label="Nachricht an PAI"
             onChange={e => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; }}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !mobil) { e.preventDefault(); senden(input); } }} />
           <button className="send" disabled={busy || !input.trim()} aria-label="Senden">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
           </button>
         </form>
-        <p className="note">Nur Testdaten eingeben. PAI versendet nichts selbst – Mails schickst du.</p>
+        <p className="note">Nur Testdaten. PAI sendet keine Mails – das machst du.</p>
       </div></footer>
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
@@ -175,17 +184,31 @@ async function kopieren(t: string, label: string, zeige: (t: string) => void) {
   try { await navigator.clipboard.writeText(t); zeige(label + ' kopiert'); } catch { zeige('Kopieren nicht möglich – Text markieren'); }
 }
 
+function UserNachricht({ text }: { text: string }) {
+  const lang = text.split('\n').length > 6 || text.length > 400;
+  const [auf, setAuf] = useState(false);
+  return (
+    <div className={'m-user' + (lang && !auf ? ' zu' : '')}>
+      {lang && !auf ? text.split('\n').slice(0, 4).join('\n') : text}
+      {lang && <button className="mehr" onClick={() => setAuf(!auf)}>{auf ? 'Weniger' : `Ganze Mail (${text.split('\n').length} Zeilen)`}</button>}
+    </div>
+  );
+}
+
 function MailKarte({ c, zeige }: { c: Extract<Card, { type: 'mail' }>; zeige: (t: string) => void }) {
   const mailto = `mailto:${encodeURIComponent(c.an || '')}?subject=${encodeURIComponent(c.betreff)}&body=${encodeURIComponent(c.text)}`;
+  const [auf, setAuf] = useState(false);
+  const lang = c.text.split('\n').length > 9;
   return (
     <div className="card">
-      <div className="to">E-Mail-Entwurf an {c.an || '–'}</div>
+      <div className="to">Mail-Entwurf an {c.an || '–'}</div>
       <div className="subj">{c.betreff}</div>
-      <pre>{c.text}</pre>
+      <pre className={lang && !auf ? 'zu' : ''}>{c.text}</pre>
+      {lang && <button className="mehr" onClick={() => setAuf(!auf)}>{auf ? 'Weniger' : 'Ganzen Text zeigen'}</button>}
       <div className="row">
+        <button className="btn primary" onClick={() => kopieren(c.text, 'Text', zeige)}>Text kopieren</button>
         <button className="btn" onClick={() => kopieren(c.betreff, 'Betreff', zeige)}>Betreff kopieren</button>
-        <button className="btn" onClick={() => kopieren(c.text, 'Text', zeige)}>Text kopieren</button>
-        <a className="btn ghost" href={mailto}>In Mail-App öffnen</a>
+        <a className="btn ghost" href={mailto}>In Mail-App</a>
       </div>
     </div>
   );
@@ -195,6 +218,7 @@ function KontaktKarte({ c, zeige }: { c: Extract<Card, { type: 'vcard' }>; zeige
   const form = useRef<HTMLFormElement>(null);
   let svg = '';
   try { const q: any = qrcode(0, 'L'); q.stringToBytes = (qrcode as any).stringToBytesFuncs['UTF-8']; q.addData(c.vcf, 'Byte'); q.make(); svg = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }); } catch {}
+  const tel = (c.vcf.match(/^TEL;TYPE=CELL:(.+)$/m) || [])[1]?.trim();
   async function teilen() {
     const file = new File([c.vcf], `${c.name}.vcf`, { type: 'text/vcard' });
     if ((navigator as any).canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: c.name }); } catch {} }
@@ -206,11 +230,12 @@ function KontaktKarte({ c, zeige }: { c: Extract<Card, { type: 'vcard' }>; zeige
       <div className="vc-body">
         <div className="to">Kontaktkarte · Lead {c.nr}</div>
         <div className="subj">{c.name}</div>
-        <div className="hint">Antippen öffnet „Neuer Kontakt“. Am Rechner: QR-Code mit dem iPhone scannen.</div>
+        <div className="hint qr-hint">Am Rechner: QR-Code mit der iPhone-Kamera scannen.</div>
         <form ref={form} method="POST" action="/api/vcard" target="_blank">
           <input type="hidden" name="vcf" value={c.vcf} /><input type="hidden" name="name" value={c.name} />
           <div className="row">
-            <button className="btn primary" type="submit">Zu Kontakten hinzufügen</button>
+            <button className="btn primary" type="submit">Kontakt speichern</button>
+            {tel && <a className="btn" href={`tel:${tel}`}>Anrufen</a>}
             <button className="btn ghost" type="button" onClick={teilen}>Teilen</button>
           </div>
         </form>
