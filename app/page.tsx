@@ -9,6 +9,7 @@ import { ausfuehren, Card } from '@/lib/tools';
 import { kontext } from '@/lib/prompt';
 import { demoState, BEISPIEL_MAIL } from '@/lib/demo';
 import { ft, fdl } from '@/lib/zeit';
+import { Logo } from '@/components/Logo';
 
 type UiMsg = { role: 'user' | 'ai'; text: string; acts: { t: string; err?: boolean }[]; cards: Card[]; quellen?: { url: string; titel: string }[]; starts?: boolean; busy?: boolean };
 type ApiMsg = { role: 'user' | 'assistant'; content: any };
@@ -158,7 +159,7 @@ export default function Chat() {
   return (
     <div className="chat">
       <header className="top"><div className="col">
-        <div className="mark">PA<i>I</i><span className="test">Testdaten</span></div>
+        <div className="mark"><Logo height={34} fg="#000000" /><span className="test">Testdaten</span></div>
         <button className={'reset' + (resetArm ? ' arm' : '')} onClick={neuStart}>{resetArm ? 'Alles löschen? Nochmal tippen' : 'Neu starten'}</button>
       </div></header>
       <main className="feed" ref={feed}><div className="col"><div className="msgs">

@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { Logo } from '@/components/Logo';
 
 export default function Login() {
   const [code, setCode] = useState(''), [err, setErr] = useState(''), [busy, setBusy] = useState(false);
@@ -11,7 +12,7 @@ export default function Login() {
   return (
     <main className="login">
       <form onSubmit={go}>
-        <div className="mark">PA<i>I</i></div>
+        <Logo height={96} fg="#000000" />
         <p className="muted">Zugang nur mit Code. Demo mit Testdaten.</p>
         <input type="password" inputMode="numeric" autoComplete="current-password" placeholder="Zugangscode" value={code} onChange={e => setCode(e.target.value)} autoFocus aria-label="Zugangscode" />
         <button className="btn primary" disabled={busy || !code}>{busy ? 'Prüfe …' : 'Öffnen'}</button>
