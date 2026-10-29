@@ -5,7 +5,7 @@ export async function GET(req: Request) {
   if (!/^\d{5}$/.test(plz)) return Response.json({ error: 'PLZ ungültig' }, { status: 400 });
   try {
     const r = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${plz}&country=de&format=json&limit=1`, {
-      headers: { 'User-Agent': 'PAI-Vertriebsassistent/0.1 (Testbetrieb)', 'Accept-Language': 'de' },
+      headers: { 'User-Agent': 'PAI-Assistent/0.1 (Testbetrieb)', 'Accept-Language': 'de' },
       next: { revalidate: 60 * 60 * 24 * 30 },
     });
     const d = await r.json();

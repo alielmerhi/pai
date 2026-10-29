@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
   title: 'PAI',
-  description: 'Persönlicher KI-Mitarbeiter im Vertrieb',
+  description: 'Dein zweites Gehirn für die Arbeit mit Kunden',
   appleWebApp: { capable: true, title: 'PAI', statusBarStyle: 'default' },
   robots: { index: false, follow: false },
 };
