@@ -88,3 +88,20 @@ describe('Mitdenken', () => {
     expect(auswaehlen({ a: { gezeigt: 6, genutzt: 0 } }, k).map(x => x.key)).toEqual(['b']);
   });
 });
+
+describe('Flexibel und Wissen', () => {
+  it('flexibel: Termin direkt ab frühestem Beginn möglich, ohne Fahrzeitabzug', () => {
+    const c = ctx(); run(c, 'profil_einrichten', { name: 'A', beruf: 'B', start_plz: '10115', zeitmodell: 'flexibel', arbeitsbeginn: '08:00', arbeitsende: '20:00', freie_tage: [] });
+    const v = freieZeiten(c.S, { geo: BEISPIEL_GEO['16515'] }, { nurTag: new Date(2026, 9, 30) }, NOW);
+    expect(v[0].start).toBe('2026-10-30T08:00');
+    const f = ctx(); run(f, 'profil_einrichten', { name: 'A', beruf: 'B', start_plz: '10115', zeitmodell: 'fest', arbeitsbeginn: '08:00', arbeitsende: '20:00', freie_tage: [] });
+    expect(freieZeiten(f.S, { geo: BEISPIEL_GEO['16515'] }, { nurTag: new Date(2026, 9, 30) }, NOW)[0].start).not.toBe('2026-10-30T08:00');
+  });
+  it('Wissen korrigieren mit Bestätigung und Rücknahme', () => {
+    const c = eingerichtet(); c.S.profil.wissen = { text: '### Ablauf\n- Erstanruf innerhalb von 24 h\n- Termin vor Ort', quellen: [], stand: NOW.toISOString() };
+    const v = run(c, 'wissen_korrigieren', { falsch: 'innerhalb von 24 h', richtig: 'Erstanruf innerhalb von 2 Stunden', beschreibung: 'schneller' });
+    expect(c.S.profil.wissen!.text).toContain('24 h');
+    c.zug = 2; run(c, 'profil_bestaetigen', { id: v.id }); expect(c.S.profil.wissen!.text).toContain('2 Stunden');
+    run(c, 'profil_zuruecknehmen', { id: v.id }); expect(c.S.profil.wissen!.text).toContain('24 h');
+  });
+});

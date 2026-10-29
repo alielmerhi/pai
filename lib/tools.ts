@@ -26,7 +26,8 @@ const PROFIL_FELDER = {
   name: { type: 'string', description: 'Vorname des Nutzers' }, beruf: S_, branche: S_,
   assistent: { type: 'string', description: 'Name, den der Nutzer seinem Assistenten gibt (Standard PAI)' },
   start_strasse: S_, start_plz: S_, start_ort: { type: 'string', description: 'Wo der Arbeitstag beginnt (Büro oder Zuhause)' },
-  arbeitsbeginn: { type: 'string', description: 'HH:MM' }, arbeitsende: { type: 'string', description: 'HH:MM' },
+  zeitmodell: { type: 'string', enum: ['fest', 'flexibel'], description: 'fest = feste Arbeitszeiten; flexibel = arbeitet nur, wenn Kunden Termine haben' },
+  arbeitsbeginn: { type: 'string', description: 'HH:MM; bei flexibel: frühester Terminbeginn' }, arbeitsende: { type: 'string', description: 'HH:MM; bei flexibel: spätestes Terminende' },
   termin_dauer: { type: 'number', description: 'übliche Termindauer in Minuten' }, puffer: { type: 'number', description: 'Minuten Puffer zwischen Terminen' },
   freie_tage: { type: 'array', items: { type: 'string', enum: TAG_LANG }, description: 'Tage ohne Termine' },
   arbeitsweise: { ...L_, description: 'Abläufe in den Worten des Nutzers' }, regeln: { ...L_, description: 'feste Wünsche, wie PAI arbeiten soll' },
@@ -37,6 +38,7 @@ export const TOOLS = [
   { name: 'profil_anzeigen', description: '„Wie arbeitest du gerade?“: Profil, Arbeitsweise, Regeln und Änderungsverlauf.', input_schema: { type: 'object', properties: {} } },
   { name: 'profil_aendern', description: 'Änderung an Profil oder Arbeitsweise VORSCHLAGEN (noch nicht aktiv). Liefert vorher → nachher. Danach fragen; erst nach dem Ja in einer neuen Nachricht profil_bestaetigen. Listen (arbeitsweise, regeln, nervt, freie_tage) immer komplett neu übergeben.', input_schema: { type: 'object', properties: { feld: { type: 'string', enum: Object.keys(PROFIL_FELDER) }, wert: { description: 'neuer Wert; bei Listen die komplette neue Liste' }, beschreibung: { type: 'string', description: 'in Worten des Nutzers' } }, required: ['feld', 'wert', 'beschreibung'] } },
   { name: 'profil_bestaetigen', description: 'Vorgeschlagene Änderung aktivieren – NUR nachdem der Nutzer in einer neuen Nachricht zugestimmt hat.', input_schema: { type: 'object', properties: { id: N_ }, required: ['id'] } },
+  { name: 'wissen_korrigieren', description: 'Sagt der Nutzer, dass etwas in deinem Branchenwissen falsch ist oder fehlt: Korrektur VORSCHLAGEN (noch nicht aktiv). falsch = Wortlaut (oder eindeutiger Teil) des falschen Punkts; richtig = neuer Text (leer = Punkt streichen); ergaenzen = neuer Punkt. Danach vorher → nachher zeigen, fragen, erst nach dem Ja profil_bestaetigen.', input_schema: { type: 'object', properties: { falsch: S_, richtig: S_, ergaenzen: S_, beschreibung: S_ }, required: ['beschreibung'] } },
   { name: 'profil_zuruecknehmen', description: 'Aktive Änderung zurücknehmen oder offenen Vorschlag verwerfen.', input_schema: { type: 'object', properties: { id: N_ }, required: ['id'] } },
   { name: 'uebersicht', description: 'Tagesüberblick: Termine mit Fahrzeiten und Konflikten, fällige Aufgaben, offene Zusagen. Für „was steht an“, „morgen“, „Dienstag“.', input_schema: { type: 'object', properties: { datum: { type: 'string', description: 'heute, morgen, Wochentag oder TT.MM.' } } } },
   { name: 'kontakte_suchen', description: 'Kontakte nach Name, Firma, Ort, PLZ, Status, Tag oder Stichwort in Notizen finden.', input_schema: { type: 'object', properties: { suche: S_ } } },
@@ -123,6 +125,8 @@ function profilWert(p: Profil, feld: string): unknown {
 }
 function profilPruefen(feld: string, v: any): unknown {
   if (['arbeitsweise', 'regeln', 'nervt'].includes(feld)) return liste(v);
+  if (feld === 'zeitmodell') { const z = String(v); if (z !== 'fest' && z !== 'flexibel') throw new Error('zeitmodell: fest oder flexibel'); return z; }
+  if (feld === 'wissen') return String(v ?? '').trim();
   if (feld === 'freie_tage') { const t = liste(v).map(x => TAG_LANG.findIndex(n => norm(n) === norm(x))).filter(x => x >= 0); return t.map(d => TAG_LANG[d]); }
   if (['arbeitsbeginn', 'arbeitsende'].includes(feld)) { const m = String(v).match(/^(\d{1,2})(?::(\d{2}))?/); if (!m || +m[1] > 23) throw new Error('Uhrzeit als HH:MM'); return `${m[1].padStart(2, '0')}:${m[2] || '00'}`; }
   if (['termin_dauer', 'puffer'].includes(feld)) { const n = Number(v); if (!isFinite(n) || n < 0 || n > 600) throw new Error('Minuten zwischen 0 und 600'); return Math.round(n); }
@@ -135,12 +139,14 @@ function profilSetzen(ctx: Ctx, feld: string, v: any) {
   else if (feld === 'start_plz') { p.start.plz = v; p.start.geo = geoFuer(ctx, v); }
   else if (feld === 'start_ort') p.start.ort = v;
   else if (feld === 'termin_dauer') p.terminDauer = v;
+  else if (feld === 'wissen') p.wissen = { quellen: [], stand: new Date().toISOString(), ...(p.wissen || {}), text: v };
   else if (feld === 'freie_tage') p.freieTage = (v as string[]).map(x => TAG_LANG.indexOf(x)).filter(x => x >= 0);
   else (p as any)[feld] = v;
 }
 export function profilKurz(p: Profil) {
   return { name: p.name, beruf: p.beruf, branche: p.branche, assistent: p.assistent, startpunkt: adresse(p.start) || null,
-    arbeitszeit: `${p.arbeitsbeginn}–${p.arbeitsende}`, termin_dauer_min: p.terminDauer, puffer_min: p.puffer,
+    zeitmodell: p.zeitmodell === 'flexibel' ? 'flexibel – arbeitet nur, wenn Kunden Termine haben; Termine bündeln, keine leeren Tage verplanen' : 'feste Arbeitszeiten',
+    [p.zeitmodell === 'flexibel' ? 'termine_moeglich' : 'arbeitszeit']: `${p.arbeitsbeginn}–${p.arbeitsende}`, termin_dauer_min: p.terminDauer, puffer_min: p.puffer,
     freie_tage: p.freieTage.map(d => TAG_LANG[d]), arbeitsweise: p.arbeitsweise, regeln: p.regeln, nervt: p.nervt };
 }
 
@@ -156,7 +162,7 @@ function konflikte(S: State, t: Termin) {
   if (vor && !w.length) { const m = fahrt(vor, t), l = (+new Date(t.start) - +ende(vor)) / 60000; if (m != null && l < m + S.profil.puffer) w.push(`Nur ${Math.round(l)} Min. nach „${vor.titel}“, Fahrt ca. ${m} Min.`); }
   if (nach && !w.length) { const m = fahrt(t, nach), l = (+new Date(nach.start) - +ende(t)) / 60000; if (m != null && l < m + S.profil.puffer) w.push(`Nur ${Math.round(l)} Min. bis „${nach.titel}“, Fahrt ca. ${m} Min.`); }
   const [eh, em] = S.profil.arbeitsende.split(':').map(Number), e = ende(t);
-  if (e.getHours() * 60 + e.getMinutes() > eh * 60 + em) w.push(`Endet nach deinem Arbeitsende (${S.profil.arbeitsende})`);
+  if (e.getHours() * 60 + e.getMinutes() > eh * 60 + em) w.push(S.profil.zeitmodell === 'flexibel' ? `Endet nach deinem spätesten Termin-Ende (${S.profil.arbeitsende})` : `Endet nach deinem Arbeitsende (${S.profil.arbeitsende})`);
   if (S.profil.freieTage.includes(new Date(t.start).getDay())) w.push(`${TAG_LANG[new Date(t.start).getDay()]} ist eigentlich dein freier Tag`);
   return w;
 }
@@ -183,6 +189,24 @@ export function ausfuehren(name: string, i: any, ctx: Ctx): unknown {
       S.aenderungen.push({ id, ts: now.toISOString(), feld, vorher: structuredClone(vorher), nachher, text: String(i.beschreibung || ''), status: 'offen', zug: ctx.zug ?? 0 });
       act(`Änderung #${id} vorgeschlagen – wartet auf dein Ja`);
       return { id, vorher, nachher, hinweis: 'Noch nicht aktiv. Vorher → nachher zeigen und fragen, ob das ab jetzt gelten soll.' };
+    }
+    case 'wissen_korrigieren': {
+      const alt = S.profil.wissen?.text || ''; let neu = alt; let vorher = '', nachher = '';
+      if (i.falsch) {
+        const zeilen = alt.split('\n'), q = norm(String(i.falsch));
+        const idx = zeilen.findIndex(z => !z.startsWith('#') && norm(z).includes(q));
+        if (idx < 0) throw new Error('Diesen Punkt finde ich im Branchenwissen nicht – Wortlaut prüfen.');
+        vorher = zeilen[idx].replace(/^-\s*/, '');
+        if (i.richtig) { zeilen[idx] = '- ' + String(i.richtig).trim(); nachher = String(i.richtig).trim(); } else { zeilen.splice(idx, 1); nachher = '(gestrichen)'; }
+        neu = zeilen.join('\n');
+      }
+      if (i.ergaenzen) { neu = /### Von dir ergänzt/.test(neu) ? neu + '\n- ' + String(i.ergaenzen).trim() : `${neu}\n\n### Von dir ergänzt\n- ${String(i.ergaenzen).trim()}`; nachher = [nachher, '+ ' + String(i.ergaenzen).trim()].filter(Boolean).join(' · '); }
+      if (neu === alt) throw new Error('Nichts zu ändern');
+      S.aenderungen.forEach(a => { if (a.status === 'offen' && a.feld === 'wissen') a.status = 'zurueckgenommen'; });
+      const id = (S.aenderungen.at(-1)?.id || 0) + 1;
+      S.aenderungen.push({ id, ts: now.toISOString(), feld: 'wissen', vorher: alt, nachher: neu, text: String(i.beschreibung || 'Branchenwissen korrigiert'), status: 'offen', zug: ctx.zug ?? 0 });
+      act(`Korrektur #${id} vorgeschlagen – wartet auf dein Ja`);
+      return { id, vorher: vorher || '(neu)', nachher, hinweis: 'Noch nicht aktiv. Zeigen und fragen, ob das so stimmt.' };
     }
     case 'profil_bestaetigen': {
       const a = S.aenderungen.find(x => x.id === Number(i.id)); if (!a || a.status !== 'offen') throw new Error('Kein offener Vorschlag mit dieser Nummer');

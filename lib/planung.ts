@@ -69,14 +69,14 @@ export function freieZeiten(S: State, ziel: Punkt, o: { dauer?: number; ab?: Dat
       const vor = [...ts].reverse().find(t => +new Date(t.start) < +s), nach = ts.find(t => +new Date(t.start) >= +s);
       const von: Punkt = vor || p.start, bis: Punkt = nach || p.start;
       const hin = fahrt(von, ziel) ?? STANDARD_FAHRT, weg = fahrt(ziel, bis) ?? STANDARD_FAHRT;
-      const frei = vor ? +ende(vor) + (hin + p.puffer) * 60000 : +beginn + hin * 60000;
+      const frei = vor ? +ende(vor) + (hin + p.puffer) * 60000 : p.zeitmodell === 'flexibel' ? +beginn : +beginn + hin * 60000; // flexibel: fährt einfach früher los
       if (+s < frei) continue;
       if (nach && +e + (weg + p.puffer) * 60000 > +new Date(nach.start)) continue;
       if (ts.some(t => +new Date(t.start) < +e && +ende(t) > +s)) continue;
       const direkt = vor && nach ? (fahrt(vor, nach) ?? STANDARD_FAHRT) : 0;
       const umweg = vor || nach ? hin + weg - direkt : hin * 2;
       const nah = [vor, nach].filter(Boolean).map(t => ({ t: t!, m: fahrt(t!, ziel) })).filter(x => x.m != null).sort((a, b) => a.m! - b.m!)[0];
-      const grund = !ts.length ? 'Freier Tag, noch keine Termine' : nah ? `${nah.m} Min. von „${nah.t.titel}“ (${ft(nah.t.start)})` : 'Passt zwischen die Termine';
+      const grund = !ts.length ? (p.zeitmodell === 'flexibel' ? 'Noch kein Termin an diesem Tag – du müsstest extra losfahren' : 'Freier Tag, noch keine Termine') : nah ? `${nah.m} Min. von „${nah.t.titel}“ (${ft(nah.t.start)})` : 'Passt zwischen die Termine';
       if (!bester || umweg < bester.umweg) bester = { start: s, umweg, grund };
     }
     if (bester) kandidaten.push(bester);

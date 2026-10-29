@@ -12,6 +12,7 @@ import { Knopf, nachAktion, hinweise, auswaehlen, Statistik } from '@/lib/vorsch
 import { ft, fdl } from '@/lib/zeit';
 import { Logo } from '@/components/Logo';
 import { Einrichtung, Einrichtungswerte, Wissen } from '@/components/Einrichtung';
+import { WissenEditor } from '@/components/WissenEditor';
 
 type UiMsg = { role: 'user' | 'ai'; text: string; acts: { t: string; err?: boolean }[]; cards: Card[]; quellen?: { url: string; titel: string }[]; starts?: boolean; busy?: boolean; knoepfe?: Knopf[]; lokal?: boolean };
 type ApiMsg = { role: 'user' | 'assistant'; content: any };
@@ -226,21 +227,46 @@ export default function Chat() {
   }
 
   const mobil = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+  const [panel, setPanel] = useState(false);
+  const [profilEdit, setProfilEdit] = useState(false);
+  const [einlesen, setEinlesen] = useState<'' | 'laeuft' | string>('');
   async function einrichten(w: Einrichtungswerte, wissen: Wissen | null) {
     if (!S) return;
+    const bearbeitet = S.profil.eingerichtet;
     await geoFuer(w.start_plz);
+    S.profil.eingerichtet = false;
     ausfuehren('profil_einrichten', w, { S, acts: [], cards: [], now: new Date(), geo: GEO });
     S.profil.wissen = wissen;
-    speichern(S); setS({ ...S }); api.current = []; localStorage.removeItem(AKEY);
+    speichern(S); setS({ ...S }); setProfilEdit(false); setPanel(false);
+    if (bearbeitet) { setMsgs(m => [...m, { role: 'ai', lokal: true, acts: [{ t: 'Profil aktualisiert' }], cards: [], text: 'Dein Profil ist aktualisiert. Ab jetzt arbeite ich mit den neuen Angaben.' }]); scrollZiel.current = 'ende'; return; }
+    api.current = []; localStorage.removeItem(AKEY);
     setMsgs([begruessung(S)]); scrollZiel.current = 'ende';
   }
-  if (S && !S.profil.eingerichtet) return <Einrichtung fertig={einrichten} />;
+  function wissenSpeichern(text: string) {
+    if (!S) return;
+    S.profil.wissen = { quellen: [], ...(S.profil.wissen || {}), text, stand: S.profil.wissen?.stand || new Date().toISOString() };
+    S.log.push({ ts: new Date().toISOString(), text: 'Branchenwissen von dir bearbeitet' });
+    speichern(S); setS({ ...S }); zeige('Branchenwissen gespeichert');
+  }
+  async function neuEinlesen() {
+    if (!S) return; setEinlesen('laeuft');
+    try {
+      const p = S.profil;
+      const r = await fetch('/api/wissen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ beruf: p.beruf, branche: p.branche, ort: p.start.ort, arbeitsweise: p.arbeitsweise, nervt: p.nervt }) });
+      if (r.status === 401) { location.href = '/login'; return; }
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Einlesen hat nicht geklappt.');
+      S.profil.wissen = { text: d.text, quellen: d.quellen || [], stand: new Date().toISOString() };
+      speichern(S); setS({ ...S }); setEinlesen(''); zeige('Neu eingelesen');
+    } catch (e: any) { setEinlesen(e.message || 'Keine Verbindung.'); }
+  }
+  if (S && (!S.profil.eingerichtet || profilEdit)) return <Einrichtung fertig={einrichten} vorlage={profilEdit ? S.profil : null} abbrechen={profilEdit ? () => setProfilEdit(false) : undefined} />;
 
   return (
     <div className="chat">
       <header className="top"><div className="col">
         <div className="mark"><Logo height={34} fg="#000000" /><span className="test">Testdaten</span></div>
-        <button className={'reset' + (resetArm ? ' arm' : '')} onClick={neuStart}>{resetArm ? 'Alles löschen? Nochmal tippen' : 'Neu starten'}</button>
+        <div className="kopf-rechts"><button className="reset" onClick={() => setPanel(true)}>Mein {S?.profil.assistent || 'PAI'}</button>
+        <button className={'reset' + (resetArm ? ' arm' : '')} onClick={neuStart}>{resetArm ? 'Alles löschen? Nochmal tippen' : 'Neu starten'}</button></div>
       </div></header>
       <main className="feed" ref={feed}><div className="col"><div className="msgs">
         {msgs.map((m, i) => m.role === 'user'
@@ -270,6 +296,29 @@ export default function Chat() {
         </form>
         <p className="note">Nur Testdaten. Alles bleibt auf diesem Gerät. PAI sendet nichts selbst. <span className="ver">Version {process.env.NEXT_PUBLIC_VERSION}</span></p>
       </div></footer>
+      {panel && S && <div className="panel" role="dialog" aria-label="Mein PAI">
+        <div className="panel-col">
+          <div className="panel-kopf"><h2>Mein {S.profil.assistent || 'PAI'}</h2><button className="btn ghost" onClick={() => setPanel(false)}>Schließen</button></div>
+          <section>
+            <h3>Profil</h3>
+            <dl className="profil">
+              <dt>Name</dt><dd>{S.profil.name}</dd>
+              <dt>Beruf</dt><dd>{S.profil.beruf}{S.profil.branche ? ` · ${S.profil.branche}` : ''}</dd>
+              <dt>{S.profil.zeitmodell === 'flexibel' ? 'Termine' : 'Arbeitszeit'}</dt><dd>{S.profil.zeitmodell === 'flexibel' ? `flexibel, ${S.profil.arbeitsbeginn}–${S.profil.arbeitsende}` : `${S.profil.arbeitsbeginn}–${S.profil.arbeitsende}`}</dd>
+              <dt>Start</dt><dd>{[S.profil.start.strasse, `${S.profil.start.plz} ${S.profil.start.ort}`].filter(x => x.trim()).join(', ')}</dd>
+            </dl>
+            <button className="btn" onClick={() => setProfilEdit(true)}>Profil bearbeiten</button>
+          </section>
+          <section>
+            <h3>Branchenwissen</h3>
+            <p className="hint">{S.profil.wissen ? `Im Internet recherchiert am ${fdl(S.profil.wissen.stand)}. Was nicht stimmt, kannst du ändern oder löschen – ich arbeite dann mit deiner Version.` : 'Noch kein Branchenwissen.'}</p>
+            {S.profil.wissen?.text && <WissenEditor key={S.profil.wissen.stand + S.profil.wissen.text.length} text={S.profil.wissen.text} speichern={wissenSpeichern} />}
+            {S.profil.wissen && S.profil.wissen.quellen.length > 0 && <div className="quellen">Quellen: {S.profil.wissen.quellen.map((q, i) => <a key={i} href={q.url} target="_blank" rel="noopener noreferrer">{q.titel}</a>)}</div>}
+            <button className="btn" disabled={einlesen === 'laeuft'} onClick={neuEinlesen}>{einlesen === 'laeuft' ? 'Lese mich ein … (ca. 1 Min.)' : S.profil.wissen ? 'Neu einlesen' : 'Jetzt einlesen'}</button>
+            {einlesen && einlesen !== 'laeuft' && <p className="setup-fehler">{einlesen}</p>}
+          </section>
+        </div>
+      </div>}
       {neu && <button className="update" onClick={() => location.reload()}>Neue Version da – tippen zum Laden</button>}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>

@@ -21,7 +21,9 @@ export type Profil = {
   eingerichtet: boolean;
   name: string; beruf: string; branche: string; assistent: string;
   start: { strasse: string; plz: string; ort: string; geo?: Geo | null }; // Startpunkt der Touren
-  arbeitsbeginn: string; arbeitsende: string; terminDauer: number; puffer: number;
+  zeitmodell: 'fest' | 'flexibel'; // flexibel = arbeitet nur, wenn Kunden Termine haben
+  arbeitsbeginn: string; arbeitsende: string; // fest: Arbeitszeit · flexibel: frühester Termin / spätestes Ende
+  terminDauer: number; puffer: number;
   freieTage: number[];              // 0 = So … 6 = Sa
   arbeitsweise: string[];           // Abläufe in seinen Worten
   regeln: string[];                 // „frag immer nach …“, „Sie-Form in Mails“
@@ -38,7 +40,7 @@ export type State = {
 export const LEERES_PROFIL: Profil = {
   eingerichtet: false, name: '', beruf: '', branche: '', assistent: 'PAI',
   start: { strasse: '', plz: '', ort: '' },
-  arbeitsbeginn: '09:00', arbeitsende: '18:00', terminDauer: 60, puffer: 15, freieTage: [0, 6],
+  zeitmodell: 'fest', arbeitsbeginn: '09:00', arbeitsende: '18:00', terminDauer: 60, puffer: 15, freieTage: [0, 6],
   arbeitsweise: [], regeln: [], nervt: [],
 };
 

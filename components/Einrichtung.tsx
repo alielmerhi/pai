@@ -1,12 +1,13 @@
 'use client';
 import { useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
 import { Logo } from '@/components/Logo';
+import { WissenEditor } from '@/components/WissenEditor';
+import type { Profil } from '@/lib/state';
 
 export type Einrichtungswerte = {
   name: string; beruf: string; branche: string; assistent: string;
   start_strasse: string; start_plz: string; start_ort: string;
-  arbeitsbeginn: string; arbeitsende: string; termin_dauer: number; puffer: number; freie_tage: string[];
+  zeitmodell: 'fest' | 'flexibel'; arbeitsbeginn: string; arbeitsende: string; termin_dauer: number; puffer: number; freie_tage: string[];
   arbeitsweise: string[]; nervt: string[]; regeln: string[];
 };
 export type Wissen = { text: string; quellen: { url: string; titel: string }[]; stand: string };
@@ -18,7 +19,10 @@ const ZEITFRESSER = ['Kontakte abtippen', 'Termine eintragen', 'Routen planen', 
 const SCHRITTE = ['Über dich', 'Dein Arbeitstag', 'Deine Arbeitsweise'];
 const zeilen = (t: string) => t.split('\n').map(x => x.replace(/^[-•*\d.)\s]+/, '').trim()).filter(Boolean);
 
-export function Einrichtung({ fertig }: { fertig: (w: Einrichtungswerte, wissen: Wissen | null) => Promise<void> | void }) {
+const BEKANNT = BRANCHEN.slice(0, -1);
+const TAGNAMEN = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+
+export function Einrichtung({ fertig, vorlage, abbrechen }: { fertig: (w: Einrichtungswerte, wissen: Wissen | null) => Promise<void> | void; vorlage?: Profil | null; abbrechen?: () => void }) {
   const [schritt, setSchritt] = useState(0);
   const [fehler, setFehler] = useState('');
   const [laeuft, setLaeuft] = useState(false);
@@ -37,11 +41,14 @@ export function Einrichtung({ fertig }: { fertig: (w: Einrichtungswerte, wissen:
     } catch (e: any) { setLernen({ status: 'fehler', werte, fehler: e.message || 'Keine Verbindung.' }); }
   }
   async function abschliessen(wissen: Wissen | null) { if (!lernen) return; setLaeuft(true); try { await fertig(lernen.werte, wissen); } finally { setLaeuft(false); } }
+  const v = vorlage;
   const [w, setW] = useState({
-    name: '', beruf: '', branche: '', brancheEigen: '', assistent: 'PAI',
-    start_strasse: '', start_plz: '', start_ort: '',
-    arbeitsbeginn: '09:00', arbeitsende: '18:00', termin_dauer: 60, puffer: 15, freie_tage: ['Samstag', 'Sonntag'],
-    ablauf: '', nervt: [] as string[], nervtEigen: '', regeln: '',
+    name: v?.name || '', beruf: v?.beruf || '', branche: v ? (BEKANNT.includes(v.branche) ? v.branche : v.branche ? 'Sonstiges' : '') : '', brancheEigen: v && !BEKANNT.includes(v.branche) ? v.branche : '', assistent: v?.assistent || 'PAI',
+    start_strasse: v?.start.strasse || '', start_plz: v?.start.plz || '', start_ort: v?.start.ort || '',
+    zeitmodell: (v?.zeitmodell || 'fest') as 'fest' | 'flexibel',
+    arbeitsbeginn: v?.arbeitsbeginn || '09:00', arbeitsende: v?.arbeitsende || '18:00', termin_dauer: v?.terminDauer || 60, puffer: v?.puffer ?? 15,
+    freie_tage: v ? v.freieTage.map(d => TAGNAMEN[d]) : ['Samstag', 'Sonntag'],
+    ablauf: v?.arbeitsweise.join('\n') || '', nervt: v ? v.nervt.filter(x => ZEITFRESSER.includes(x)) : [] as string[], nervtEigen: v ? v.nervt.filter(x => !ZEITFRESSER.includes(x)).join('\n') : '', regeln: v?.regeln.join('\n') || '',
   });
   const set = (k: keyof typeof w, v: any) => { setW(x => ({ ...x, [k]: v })); setFehler(''); };
   const umschalten = (k: 'freie_tage' | 'nervt', v: string) => set(k, w[k].includes(v) ? w[k].filter(x => x !== v) : [...w[k], v]);
@@ -51,8 +58,8 @@ export function Einrichtung({ fertig }: { fertig: (w: Einrichtungswerte, wissen:
     if (s === 1) {
       if (!/^\d{5}$/.test(w.start_plz.trim())) return 'Bitte eine fünfstellige PLZ für deinen Startpunkt eintragen.';
       if (!w.start_ort.trim()) return 'Bitte den Ort eintragen.';
-      if (w.arbeitsbeginn >= w.arbeitsende) return 'Arbeitsende muss nach dem Arbeitsbeginn liegen.';
-      if (w.freie_tage.length === 7) return 'Mindestens ein Arbeitstag muss frei bleiben.';
+      if (w.arbeitsbeginn >= w.arbeitsende) return w.zeitmodell === 'flexibel' ? 'Das späteste Ende muss nach dem frühesten Beginn liegen.' : 'Arbeitsende muss nach dem Arbeitsbeginn liegen.';
+      if (w.freie_tage.length === 7) return 'Mindestens ein Tag muss für Termine möglich sein.';
     }
     if (s === 2 && !w.nervt.length && !w.nervtEigen.trim()) return 'Wähl mindestens eine Sache, die dich Zeit kostet – daran richte ich mich aus.';
     return '';
@@ -60,12 +67,15 @@ export function Einrichtung({ fertig }: { fertig: (w: Einrichtungswerte, wissen:
   async function weiter() {
     const f = pruefen(schritt); if (f) { setFehler(f); return; }
     if (schritt < 2) { setSchritt(schritt + 1); window.scrollTo({ top: 0 }); return; }
-    einlesen({
+    const werte: Einrichtungswerte = {
         name: w.name.trim(), beruf: w.beruf.trim(), branche: w.branche === 'Sonstiges' ? w.brancheEigen.trim() || 'Sonstiges' : w.branche,
         assistent: w.assistent.trim() || 'PAI', start_strasse: w.start_strasse.trim(), start_plz: w.start_plz.trim(), start_ort: w.start_ort.trim(),
-        arbeitsbeginn: w.arbeitsbeginn, arbeitsende: w.arbeitsende, termin_dauer: w.termin_dauer, puffer: w.puffer, freie_tage: w.freie_tage,
+        zeitmodell: w.zeitmodell, arbeitsbeginn: w.arbeitsbeginn, arbeitsende: w.arbeitsende, termin_dauer: w.termin_dauer, puffer: w.puffer, freie_tage: w.freie_tage,
         arbeitsweise: zeilen(w.ablauf), nervt: [...w.nervt, ...zeilen(w.nervtEigen)], regeln: zeilen(w.regeln),
-    });
+    };
+    // Beim Bearbeiten: neu einlesen nur, wenn sich Beruf oder Branche geändert haben
+    if (v?.wissen && v.beruf === werte.beruf && v.branche === werte.branche) { setLaeuft(true); try { await fertig(werte, v.wissen); } finally { setLaeuft(false); } return; }
+    einlesen(werte);
   }
 
   if (lernen) return (
@@ -81,8 +91,8 @@ export function Einrichtung({ fertig }: { fertig: (w: Einrichtungswerte, wissen:
         </div>}
         {lernen.status === 'fertig' && lernen.wissen && <div className="lernen">
           <h1>Fertig eingelesen</h1>
-          <p className="setup-lead">Das habe ich über deine Arbeit gelernt. Stimmt etwas nicht, sag es mir einfach im Chat.</p>
-          <div className="wissen md"><ReactMarkdown components={{ a: ({ node, ...p }) => <a {...p} target="_blank" rel="noopener noreferrer" /> }}>{lernen.wissen.text}</ReactMarkdown></div>
+          <p className="setup-lead">Das habe ich über deine Arbeit gelernt. Stimmt etwas nicht oder fehlt etwas? Tipp auf „Bearbeiten“ – du kannst es auch später unter „Mein PAI“ ändern.</p>
+          <WissenEditor text={lernen.wissen.text} speichern={t => setLernen(l => (l && l.wissen ? { ...l, wissen: { ...l.wissen, text: t } } : l))} />
           {lernen.wissen.quellen.length > 0 && <div className="quellen">Quellen: {lernen.wissen.quellen.map((q, i) => <a key={i} href={q.url} target="_blank" rel="noopener noreferrer">{q.titel}</a>)}</div>}
           <div className="setup-aktionen"><button className="btn primary gross" disabled={laeuft} onClick={() => abschliessen(lernen.wissen!)}>Zum Chat</button></div>
         </div>}
@@ -102,8 +112,8 @@ export function Einrichtung({ fertig }: { fertig: (w: Einrichtungswerte, wissen:
     <div className="setup">
       <div className="setup-col">
         <div className="setup-kopf"><Logo height={40} fg="#000000" /><span className="test">Testdaten</span></div>
-        <h1>Richte deinen Assistenten ein</h1>
-        <p className="setup-lead">Damit PAI so arbeitet wie du. Dauert zwei Minuten, alles bleibt auf diesem Gerät.</p>
+        <h1>{v ? 'Profil bearbeiten' : 'Richte deinen Assistenten ein'}</h1>
+        <p className="setup-lead">{v ? 'Deine Kontakte und Notizen bleiben erhalten.' : 'Damit PAI so arbeitet wie du. Dauert zwei Minuten, alles bleibt auf diesem Gerät.'}</p>
         <ol className="fortschritt" aria-label="Fortschritt">
           {SCHRITTE.map((s, i) => <li key={s} className={i === schritt ? 'jetzt' : i < schritt ? 'fertig' : ''}><span>{i + 1}</span>{s}</li>)}
         </ol>
@@ -125,15 +135,22 @@ export function Einrichtung({ fertig }: { fertig: (w: Einrichtungswerte, wissen:
               <input value={w.start_strasse} onChange={e => set('start_strasse', e.target.value)} placeholder="Straße und Hausnummer (optional)" aria-label="Straße" autoComplete="street-address" />
               <div className="zwei"><input value={w.start_plz} onChange={e => set('start_plz', e.target.value.replace(/\D/g, '').slice(0, 5))} inputMode="numeric" placeholder="PLZ" aria-label="PLZ" autoComplete="postal-code" /><input value={w.start_ort} onChange={e => set('start_ort', e.target.value)} placeholder="Ort" aria-label="Ort" autoComplete="address-level2" /></div>
             </fieldset>
+            <fieldset><legend>Wie arbeitest du?</legend>
+              <div className="wahl">
+                <button type="button" className={w.zeitmodell === 'fest' ? 'an' : ''} aria-pressed={w.zeitmodell === 'fest'} onClick={() => set('zeitmodell', 'fest')}><b>Feste Arbeitszeiten</b><span>z. B. jeden Tag 9 bis 18 Uhr</span></button>
+                <button type="button" className={w.zeitmodell === 'flexibel' ? 'an' : ''} aria-pressed={w.zeitmodell === 'flexibel'} onClick={() => set('zeitmodell', 'flexibel')}><b>Flexibel</b><span>Ich arbeite nur, wenn Kunden Termine haben</span></button>
+              </div>
+            </fieldset>
             <div className="zwei">
-              <label>Arbeitsbeginn<input type="time" value={w.arbeitsbeginn} onChange={e => set('arbeitsbeginn', e.target.value)} /></label>
-              <label>Arbeitsende<input type="time" value={w.arbeitsende} onChange={e => set('arbeitsende', e.target.value)} /></label>
+              <label>{w.zeitmodell === 'flexibel' ? 'Termine frühestens ab' : 'Arbeitsbeginn'}<input type="time" value={w.arbeitsbeginn} onChange={e => set('arbeitsbeginn', e.target.value)} /></label>
+              <label>{w.zeitmodell === 'flexibel' ? 'Termine enden spätestens' : 'Arbeitsende'}<input type="time" value={w.arbeitsende} onChange={e => set('arbeitsende', e.target.value)} /></label>
             </div>
+            {w.zeitmodell === 'flexibel' && <small className="unter">Ich bündle Termine auf wenige Tage, damit du nicht für einen einzelnen Termin losfahren musst.</small>}
             <div className="zwei">
               <label>Übliche Termindauer<select value={w.termin_dauer} onChange={e => set('termin_dauer', +e.target.value)}>{[30, 45, 60, 90, 120].map(m => <option key={m} value={m}>{m} Min.</option>)}</select></label>
               <label>Puffer<select value={w.puffer} onChange={e => set('puffer', +e.target.value)}>{[0, 10, 15, 30, 45].map(m => <option key={m} value={m}>{m} Min.</option>)}</select></label>
             </div>
-            <fieldset><legend>An welchen Tagen keine Termine?</legend>
+            <fieldset><legend>{w.zeitmodell === 'flexibel' ? 'An welchen Tagen kannst du nie?' : 'An welchen Tagen keine Termine?'}</legend>
               <div className="chips">{TAGE.map(t => <button type="button" key={t} className={w.freie_tage.includes(t) ? 'an' : ''} aria-pressed={w.freie_tage.includes(t)} onClick={() => umschalten('freie_tage', t)}>{t.slice(0, 2)}</button>)}</div>
             </fieldset>
           </>}
@@ -150,8 +167,9 @@ export function Einrichtung({ fertig }: { fertig: (w: Einrichtungswerte, wissen:
 
           {fehler && <p className="setup-fehler" role="alert">{fehler}</p>}
           <div className="setup-aktionen">
+            {schritt === 0 && abbrechen && <button type="button" className="btn ghost" onClick={abbrechen}>Abbrechen</button>}
             {schritt > 0 && <button type="button" className="btn ghost" onClick={() => { setSchritt(schritt - 1); setFehler(''); }}>Zurück</button>}
-            <button type="submit" className="btn primary gross" disabled={laeuft}>{schritt < 2 ? 'Weiter' : 'Fertig – los geht’s'}</button>
+            <button type="submit" className="btn primary gross" disabled={laeuft}>{schritt < 2 ? 'Weiter' : v ? (laeuft ? 'Speichert …' : 'Speichern') : 'Fertig – los geht’s'}</button>
           </div>
         </form>
       </div>
