@@ -16,7 +16,7 @@ export type Kontakt = {
 export type Termin = { id: number; kontaktId?: string; titel: string; start: string; dauer: number; ort: string; plz: string; geo?: Geo | null; notiz?: string };
 export type Aufgabe = { id: number; kontaktId?: string; text: string; faellig?: string | null; erledigt: boolean; erstellt: string };
 
-// Wie der Nutzer arbeitet – entsteht im Einstiegsgespräch, später nur mit Bestätigung änderbar.
+// Wie der Nutzer arbeitet – entsteht im Einrichtungsformular, später nur mit Bestätigung änderbar.
 export type Profil = {
   eingerichtet: boolean;
   name: string; beruf: string; branche: string; assistent: string;
@@ -26,6 +26,7 @@ export type Profil = {
   arbeitsweise: string[];           // Abläufe in seinen Worten
   regeln: string[];                 // „frag immer nach …“, „Sie-Form in Mails“
   nervt: string[];                  // Was ihn heute am meisten Zeit kostet
+  wissen?: { text: string; quellen: { url: string; titel: string }[]; stand: string } | null; // selbst recherchiertes Branchenwissen
 };
 export type Aenderung = { id: number; ts: string; feld: string; vorher: unknown; nachher: unknown; text: string; status: 'offen' | 'aktiv' | 'zurueckgenommen'; zug: number };
 export type State = {

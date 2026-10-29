@@ -11,6 +11,7 @@ import { termineAm } from '@/lib/planung';
 import { Knopf, nachAktion, hinweise, auswaehlen, Statistik } from '@/lib/vorschlaege';
 import { ft, fdl } from '@/lib/zeit';
 import { Logo } from '@/components/Logo';
+import { Einrichtung, Einrichtungswerte, Wissen } from '@/components/Einrichtung';
 
 type UiMsg = { role: 'user' | 'ai'; text: string; acts: { t: string; err?: boolean }[]; cards: Card[]; quellen?: { url: string; titel: string }[]; starts?: boolean; busy?: boolean; knoepfe?: Knopf[]; lokal?: boolean };
 type ApiMsg = { role: 'user' | 'assistant'; content: any };
@@ -30,8 +31,10 @@ const STARTS_NEU = ['Beispieldaten laden'];
 function begruessung(S: State): UiMsg {
   const jetzt = new Date(), h = jetzt.getHours();
   const gruss = h >= 5 && h < 11 ? 'Guten Morgen' : h >= 11 && h < 18 ? 'Guten Tag' : 'Guten Abend';
-  if (!S.profil.eingerichtet) return { role: 'ai', acts: [], cards: [], text:
-    `${gruss}! Ich bin PAI – dein zweites Gehirn für die Arbeit mit Kunden. Ich lege Kontakte an, plane Termine und Routen und merke mir, was du mit jedem Kunden besprochen hast.\n\nDamit ich so arbeite wie du, lerne ich dich kurz kennen:\n\n1. Wie heißt du?\n2. Was machst du beruflich, in welcher Branche?\n3. Wie soll ich heißen? (Sonst bleibe ich PAI.)\n\nDu kannst auch einfach aufs Mikrofon tippen und erzählen.` };
+  if (!S.profil.eingerichtet) return { role: 'ai', acts: [], cards: [], text: '' };
+  if (!S.kontakte.length && !S.termine.length) return { role: 'ai', acts: [], cards: [], text:
+    `${gruss}, ${S.profil.name}. Ich bin ${S.profil.assistent || 'PAI'} und arbeite ab jetzt so, wie du es eingerichtet hast.\n\nSo nutzt du mich am besten:\n\n1. **Neuer Kunde?** Füg die Mail oder Signatur ein – ich lege den Kontakt an.\n2. **Nach dem Termin?** Tipp aufs Mikrofon und erzähl, wie es war – ich merke mir alles.\n3. **Unterwegs?** Frag „Wie fahre ich morgen?“ – ich plane die Route.\n\nWillst du erst mit erfundenen Beispielkunden ausprobieren?`,
+    knoepfe: [{ key: 'beispiele', label: 'Beispieldaten laden', text: 'Beispieldaten laden' }, { key: 'erster-kontakt', label: 'Ersten Kontakt anlegen', text: 'Ich möchte einen neuen Kontakt anlegen.' }] };
   const heute = termineAm(S, jetzt).filter(t => +new Date(t.start) > +jetzt).length;
   const morgen = termineAm(S, new Date(+jetzt + 864e5)).length;
   const auf = S.aufgaben.filter(a => !a.erledigt && (!a.faellig || +new Date(a.faellig) <= +jetzt + 864e5)).length;
@@ -223,6 +226,16 @@ export default function Chat() {
   }
 
   const mobil = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+  async function einrichten(w: Einrichtungswerte, wissen: Wissen | null) {
+    if (!S) return;
+    await geoFuer(w.start_plz);
+    ausfuehren('profil_einrichten', w, { S, acts: [], cards: [], now: new Date(), geo: GEO });
+    S.profil.wissen = wissen;
+    speichern(S); setS({ ...S }); api.current = []; localStorage.removeItem(AKEY);
+    setMsgs([begruessung(S)]); scrollZiel.current = 'ende';
+  }
+  if (S && !S.profil.eingerichtet) return <Einrichtung fertig={einrichten} />;
+
   return (
     <div className="chat">
       <header className="top"><div className="col">

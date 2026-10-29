@@ -34,7 +34,6 @@ const PROFIL_FELDER = {
 };
 
 export const TOOLS = [
-  { name: 'profil_einrichten', description: 'NUR im Einstiegsgespräch (Profil noch nicht eingerichtet): speichert, wer der Nutzer ist und wie er arbeitet. Danach gilt profil_aendern mit Bestätigung.', input_schema: { type: 'object', properties: PROFIL_FELDER } },
   { name: 'profil_anzeigen', description: '„Wie arbeitest du gerade?“: Profil, Arbeitsweise, Regeln und Änderungsverlauf.', input_schema: { type: 'object', properties: {} } },
   { name: 'profil_aendern', description: 'Änderung an Profil oder Arbeitsweise VORSCHLAGEN (noch nicht aktiv). Liefert vorher → nachher. Danach fragen; erst nach dem Ja in einer neuen Nachricht profil_bestaetigen. Listen (arbeitsweise, regeln, nervt, freie_tage) immer komplett neu übergeben.', input_schema: { type: 'object', properties: { feld: { type: 'string', enum: Object.keys(PROFIL_FELDER) }, wert: { description: 'neuer Wert; bei Listen die komplette neue Liste' }, beschreibung: { type: 'string', description: 'in Worten des Nutzers' } }, required: ['feld', 'wert', 'beschreibung'] } },
   { name: 'profil_bestaetigen', description: 'Vorgeschlagene Änderung aktivieren – NUR nachdem der Nutzer in einer neuen Nachricht zugestimmt hat.', input_schema: { type: 'object', properties: { id: N_ }, required: ['id'] } },
@@ -168,7 +167,7 @@ export function ausfuehren(name: string, i: any, ctx: Ctx): unknown {
     case 'profil_einrichten': {
       if (S.profil.eingerichtet) throw new Error('Profil ist schon eingerichtet – Änderungen über profil_aendern mit Bestätigung.');
       for (const [f, v] of Object.entries(i || {})) { if (v === undefined || v === null || v === '' || !(f in PROFIL_FELDER)) continue; profilSetzen(ctx, f, profilPruefen(f, v)); }
-      S.profil.eingerichtet = true; logP(S, 'Profil im Einstiegsgespräch eingerichtet');
+      S.profil.eingerichtet = true; logP(S, 'Profil eingerichtet');
       act(`Profil eingerichtet${S.profil.name ? ' für ' + S.profil.name : ''}`);
       return { eingerichtet: true, profil: profilKurz(S.profil), hinweis: S.profil.start.plz ? null : 'Startpunkt fehlt – ohne ihn keine Fahrzeiten ab Start.' };
     }

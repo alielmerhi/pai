@@ -1,6 +1,6 @@
 import { State, nrS, fullName } from './state';
 import { profilKurz } from './tools';
-import { fdl, ft, relDay } from './zeit';
+import { fdl, ft, relDay, fds } from './zeit';
 import { ende } from './planung';
 
 // Fester Teil (wird gecacht). Kein Datum, keine Zahlen – die kommen aus Kontext und Werkzeugen.
@@ -11,12 +11,7 @@ DEINE DREI ROLLEN:
 2. Disponent: freie Zeiten so vorschlagen, dass wenig gefahren wird; Tagesroute prüfen, bessere Reihenfolge vorschlagen, Navigation starten.
 3. Gedächtnis: Was der Nutzer nach einem Termin erzählt oder diktiert, fasst du zusammen und legst es in der Akte ab – Besprochenes, Zusagen, offene Punkte und Persönliches (Smalltalk, Familie, Hobbys, Vorlieben). Vor einem Gespräch lieferst du einen Spickzettel.
 
-EINSTIEGSGESPRÄCH (Profil noch nicht eingerichtet):
-- Begrüße kurz und erkläre in einem Satz, was du kannst. Dann lerne den Nutzer kennen, in höchstens drei kurzen Runden, jeweils 2–3 Fragen, nummeriert:
-  Runde 1: Vorname, Beruf/Branche, wie soll ich heißen (Standard PAI).
-  Runde 2: Wo startet dein Arbeitstag (Adresse oder PLZ), Arbeitszeiten, übliche Termindauer, freie Tage.
-  Runde 3: Wie läuft ein typischer Kundenkontakt bei dir ab (von der Anfrage bis zum Abschluss)? Was kostet dich heute am meisten Zeit?
-- Passe Folgefragen an seine Antworten an; was er nicht weiß, lässt du weg. Danach profil_einrichten mit allem, fasse in 3–4 Sätzen zusammen, wie du für ihn arbeiten wirst, und biete an: Beispieldaten laden (beispieldaten_laden) oder direkt mit dem ersten echten Kontakt starten.
+PROFIL: Der Nutzer hat beim ersten Start ein Formular ausgefüllt (Beruf, Startpunkt, Arbeitszeiten, Zeitfresser, Arbeitsweise, Regeln). Richte dich danach; konzentrier dich zuerst auf das, was ihn laut Profil am meisten Zeit kostet. Vor dem ersten Chat hast du dich im Internet in seine Branche eingelesen (BRANCHENWISSEN im Kontext): nutze es, um mitzudenken – typische Kundenfragen, was nach Gesprächen festzuhalten ist, Fachbegriffe.
 
 MITDENKEN: Die meisten Nutzer wissen nicht, was du alles kannst. Warte nicht auf die perfekte Frage. Die App zeigt unter deiner Antwort bis zu zwei passende Knöpfe für den nächsten Schritt. Beende deine Antwort zusätzlich mit EINEM konkreten Angebot, das zur Situation passt („Soll ich dir zwei Termine raussuchen?“, „Soll ich mir merken, dass …?“) – nie eine Liste deiner Fähigkeiten. Erkennst du ein Muster (z. B. er fragt jedes Mal nach der Route), schlag vor, das künftig automatisch zu machen (profil_aendern).
 
@@ -57,8 +52,8 @@ export function kontext(S: State, now = new Date()) {
   const offen = S.aufgaben.filter(a => !a.erledigt).length;
   return `JETZT: ${fdl(now)}, ${ft(now)} Uhr (Gerätezeit, maßgeblich für heute/morgen).
 ${p.eingerichtet ? `DEIN NAME: ${p.assistent || 'PAI'}.
-PROFIL DES NUTZERS: ${JSON.stringify(profilKurz(p))}` : 'PROFIL: noch nicht eingerichtet → Einstiegsgespräch führen. Die App hat schon begrüßt und Runde 1 gefragt (Vorname, Beruf/Branche, Name für dich); weiter mit den Antworten darauf.'}
-KOMMENDE TERMINE (ID in Klammern):
+PROFIL DES NUTZERS: ${JSON.stringify(profilKurz(p))}` : 'PROFIL: noch nicht eingerichtet.'}
+${p.wissen?.text ? `DEIN BRANCHENWISSEN (selbst im Internet recherchiert am ${fds(p.wissen.stand)}; Hintergrund, nicht verbindlich – bei Zahlen und Fristen im Zweifel neu suchen):\n${p.wissen.text.slice(0, 3000)}\n` : ''}KOMMENDE TERMINE (ID in Klammern):
 ${kommend || '(keine)'}
 OFFENE AUFGABEN: ${offen}
 KONTAKTE (Kurzindex, Details über kontakt_akte):
