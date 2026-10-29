@@ -8,12 +8,13 @@ import { State, laden, speichern, leererState } from '@/lib/state';
 import { ausfuehren, Card } from '@/lib/tools';
 import { kontext } from '@/lib/prompt';
 import { termineAm } from '@/lib/planung';
+import { Knopf, nachAktion, hinweise, auswaehlen, Statistik } from '@/lib/vorschlaege';
 import { ft, fdl } from '@/lib/zeit';
 import { Logo } from '@/components/Logo';
 
-type UiMsg = { role: 'user' | 'ai'; text: string; acts: { t: string; err?: boolean }[]; cards: Card[]; quellen?: { url: string; titel: string }[]; starts?: boolean; busy?: boolean };
+type UiMsg = { role: 'user' | 'ai'; text: string; acts: { t: string; err?: boolean }[]; cards: Card[]; quellen?: { url: string; titel: string }[]; starts?: boolean; busy?: boolean; knoepfe?: Knopf[]; lokal?: boolean };
 type ApiMsg = { role: 'user' | 'assistant'; content: any };
-const MKEY = 'pai-ui-v1', AKEY = 'pai-api-v1', GKEY = 'pai-geo-v1';
+const MKEY = 'pai-ui-v2', AKEY = 'pai-api-v2', GKEY = 'pai-geo-v1', TKEY = 'pai-tipps-v1', HKEY = 'pai-hinweise-v1';
 
 // PLZ-Koordinaten im Gerät zwischenspeichern; übertragen wird nur die PLZ.
 let GEO: Record<string, Geo | null> = {};
@@ -93,10 +94,10 @@ export default function Chat() {
   const rec = useRef<any>(null);
   const basis = useRef('');
   useEffect(() => { setDiktatMoeglich(!!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)); }, []);
-  function startDiktat() {
+  function startDiktat(vor?: string) {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition; if (!SR) return;
     const r = new SR(); r.lang = 'de-DE'; r.continuous = true; r.interimResults = true;
-    basis.current = input ? input.trimEnd() + ' ' : '';
+    const b = vor ?? input; basis.current = b ? b.trimEnd() + ' ' : '';
     r.onresult = (e: any) => {
       let t = ''; for (let k = 0; k < e.results.length; k++) t += e.results[k][0].transcript;
       setInput(basis.current + t);
@@ -127,6 +128,7 @@ export default function Chat() {
     setMsgs(m => [...m.map(x => ({ ...x, starts: false })), { role: 'user', text, acts: [], cards: [] }, cur]);
     const upd = () => setMsgs(m => [...m.slice(0, -1), { ...cur }]);
     const letzte = api.current[api.current.length - 1];
+    let vorschlag: Knopf[] = [];
     let verlauf = letzte?.role === 'user' // nach abgebrochener Werkzeug-Runde: Text an die offenen Ergebnisse hängen
       ? kuerzen([...api.current.slice(0, -1), { role: 'user', content: [...(Array.isArray(letzte.content) ? letzte.content : [{ type: 'text', text: String(letzte.content) }]), { type: 'text', text }] }])
       : kuerzen([...api.current, { role: 'user', content: text }]);
@@ -154,6 +156,7 @@ export default function Chat() {
           try {
             const out = ausfuehren(c.name, c.input || {}, ctx);
             cur.acts.push(...ctx.acts.map(t => ({ t }))); cur.cards.push(...ctx.cards);
+            vorschlag = [...nachAktion(S, c.name, c.input || {}, out), ...vorschlag];
             return { type: 'tool_result', tool_use_id: c.id, content: JSON.stringify(out ?? null) };
           } catch (e: any) {
             cur.acts.push({ t: e.message, err: true });
@@ -169,15 +172,53 @@ export default function Chat() {
       // Verlauf auf den Stand vor dieser Nachricht zurücksetzen (keine halben Werkzeug-Paare); Aktionen bleiben in der Akte
       api.current = kuerzen(api.current);
     } finally {
+      cur.knoepfe = zeigeKnoepfe(vorschlag);
       cur.busy = false; upd(); speichern(S); setS({ ...S }); scrollZiel.current = null;
       try { localStorage.setItem(AKEY, JSON.stringify(api.current)); } catch {}
       setBusy(false);
     }
   }
 
+  // Vorschläge: Statistik fürs Lernen (gezeigt / genutzt), nur auf diesem Gerät
+  const stat = () => { try { return JSON.parse(localStorage.getItem(TKEY) || '{}') as Statistik; } catch { return {} as Statistik; } };
+  function zeigeKnoepfe(k: Knopf[]) {
+    const st = stat(), w = auswaehlen(st, k);
+    for (const x of w) { st[x.key] ||= { gezeigt: 0, genutzt: 0 }; st[x.key].gezeigt++; }
+    try { localStorage.setItem(TKEY, JSON.stringify(st)); } catch {}
+    return w;
+  }
+  function knopfDruck(k: Knopf) {
+    const st = stat(); st[k.key] ||= { gezeigt: 1, genutzt: 0 }; st[k.key].genutzt++;
+    try { localStorage.setItem(TKEY, JSON.stringify(st)); } catch {}
+    if (k.diktat) { setInput(k.text); setMsgs(m => m.map((x, j) => (j === m.length - 1 ? { ...x, knoepfe: [] } : x))); if (diktatMoeglich) startDiktat(k.text); else { ta.current?.focus(); zeige('Erzähl per Diktiertaste der Tastatur'); } return; }
+    senden(k.text);
+  }
+
+  // Hinweise zum richtigen Zeitpunkt: beim Öffnen, beim Zurückkehren in die App und alle 5 Minuten
+  const sRef = useRef<State | null>(null); sRef.current = S;
+  const busyRef = useRef(false); busyRef.current = busy;
+  function pruefeHinweise() {
+    const s = sRef.current; if (!s || busyRef.current) return;
+    let gezeigt: Record<string, number> = {}; try { gezeigt = JSON.parse(localStorage.getItem(HKEY) || '{}'); } catch {}
+    const neu = hinweise(s, new Date()).filter(h => !gezeigt[h.id]).slice(0, 2);
+    if (!neu.length) return;
+    neu.forEach(h => (gezeigt[h.id] = Date.now()));
+    for (const [id, t] of Object.entries(gezeigt)) if (Date.now() - t > 7 * 864e5) delete gezeigt[id];
+    try { localStorage.setItem(HKEY, JSON.stringify(gezeigt)); } catch {}
+    scrollZiel.current = 'ende';
+    setMsgs(m => [...m.map(x => ({ ...x, starts: false })), { role: 'ai', lokal: true, acts: [], cards: [], text: neu.map(h => h.text).join('\n\n'), knoepfe: zeigeKnoepfe(neu.flatMap(h => h.knoepfe)) }]);
+  }
+  useEffect(() => {
+    if (!S) return;
+    const t0 = setTimeout(pruefeHinweise, 800), t = setInterval(pruefeHinweise, 5 * 60000);
+    const sicht = () => { if (document.visibilityState === 'visible') pruefeHinweise(); };
+    document.addEventListener('visibilitychange', sicht);
+    return () => { clearTimeout(t0); clearInterval(t); document.removeEventListener('visibilitychange', sicht); };
+  }, [!!S]);
+
   function neuStart() {
     if (!resetArm) { setResetArm(true); setTimeout(() => setResetArm(false), 3000); return; }
-    stopDiktat(); const s = leererState(); speichern(s); setS(s); api.current = []; localStorage.removeItem(AKEY);
+    stopDiktat(); try { localStorage.removeItem(HKEY); } catch {} const s = leererState(); speichern(s); setS(s); api.current = []; localStorage.removeItem(AKEY);
     setMsgs([begruessung(s)]); setResetArm(false); zeige('PAI neu gestartet');
   }
 
@@ -198,12 +239,13 @@ export default function Chat() {
               {m.text && <div className="txt md"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ node, ...p }) => <a {...p} target="_blank" rel="noopener noreferrer" /> }}>{m.text}</ReactMarkdown></div>}
               {m.quellen && m.quellen.length > 0 && <div className="quellen">Quellen: {m.quellen.slice(0, 6).map((q, j) => <a key={j} href={q.url} target="_blank" rel="noopener noreferrer">{q.titel}</a>)}</div>}
               {m.cards.map((c, j) => c.type === 'mail' ? <MailKarte key={j} c={c} zeige={zeige} /> : c.type === 'ics' ? <KalenderKarte key={j} c={c} /> : c.type === 'navi' ? <NaviKarte key={j} c={c} /> : c.type === 'route' ? <RoutenKarte key={j} c={c} /> : <KontaktKarte key={j} c={c} zeige={zeige} />)}
+              {i === msgs.length - 1 && !m.busy && m.knoepfe && m.knoepfe.length > 0 && <div className="knoepfe">{m.knoepfe.map(k => <button key={k.key + k.text} className={k.diktat ? 'diktat' : ''} onClick={() => knopfDruck(k)}>{k.diktat && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>}{k.label}</button>)}</div>}
               {m.starts && <div className="starts">{(S && S.kontakte.length ? STARTS : STARTS_NEU).map(s => <button key={s} onClick={() => senden(s)}>{s}</button>)}</div>}
             </div>)}
       </div></div></main>
       <footer className="compose"><div className="col">
         <form className="box" onSubmit={e => { e.preventDefault(); senden(input); }}>
-          {diktatMoeglich && <button type="button" className={'mic' + (hoert ? ' an' : '')} onClick={hoert ? stopDiktat : startDiktat} aria-label={hoert ? 'Diktat beenden' : 'Diktieren'} title={hoert ? 'Diktat beenden' : 'Diktieren'}>
+          {diktatMoeglich && <button type="button" className={'mic' + (hoert ? ' an' : '')} onClick={() => (hoert ? stopDiktat() : startDiktat())} aria-label={hoert ? 'Diktat beenden' : 'Diktieren'} title={hoert ? 'Diktat beenden' : 'Diktieren'}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
           </button>}
           <textarea ref={ta} rows={1} value={input} placeholder={hoert ? 'Ich höre zu …' : 'Nachricht, Mail oder Notiz'} aria-label="Nachricht an PAI"

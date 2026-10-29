@@ -68,3 +68,23 @@ describe('Disponent', () => {
 });
 
 it('Feiertage', () => { expect(feiertag(new Date(2026, 9, 31))).toContain('Reformation'); expect(feiertag(new Date(2026, 9, 30))).toBeNull(); });
+
+import { nachAktion, hinweise, auswaehlen } from '../lib/vorschlaege';
+describe('Mitdenken', () => {
+  it('nach Kontakt anlegen: Termin finden und Notiz', () => {
+    const c = eingerichtet(); const out = run(c, 'kontakt_anlegen', { vorname: 'Eva', nachname: 'Test' });
+    const k = nachAktion(c.S, 'kontakt_anlegen', {}, out); expect(k.map(x => x.key)).toEqual(['termin-finden', 'notiz-erzaehlen']); expect(k[0].text).toContain('Eva Test');
+  });
+  it('Hinweise: vor dem Termin, nach dem Termin, fällige Aufgabe', () => {
+    const c = eingerichtet(); run(c, 'beispieldaten_laden');
+    const t = c.S.termine.find(x => x.titel.startsWith('Berger'))!;
+    const vor = new Date(+new Date(t.start) - 20 * 60000), nach = new Date(+new Date(t.start) + 90 * 60000);
+    expect(hinweise(c.S, vor).some(h => h.id.startsWith('vor-'))).toBe(true);
+    expect(hinweise(c.S, nach).some(h => h.id.startsWith('nach-') && h.knoepfe[0].diktat)).toBe(true);
+    expect(hinweise(c.S, new Date(+new Date(t.start) + 3 * 864e5)).some(h => h.id.startsWith('aufg-'))).toBe(true);
+  });
+  it('lernt: nie genutzte Knöpfe fallen weg', () => {
+    const k = [{ key: 'a', label: 'A', text: 'a' }, { key: 'b', label: 'B', text: 'b' }];
+    expect(auswaehlen({ a: { gezeigt: 6, genutzt: 0 } }, k).map(x => x.key)).toEqual(['b']);
+  });
+});
