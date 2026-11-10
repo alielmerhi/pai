@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "de.elmerhi.pai"
+    namespace = "de.elmerhi.psai"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "de.elmerhi.pai"
+        applicationId "de.elmerhi.psai"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

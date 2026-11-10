@@ -1,4 +1,4 @@
-// PAI-Zeichen (Entwurf 29): großes P, im Kreis steht AI. Alles als Formen, keine Schrift nötig.
+// PSAI-Zeichen (Entwurf 29): großes P, im Kreis steht AI. Alles als Formen, keine Schrift nötig.
 type P = { fg?: string; ai?: string };
 export function LogoForm({ fg = '#000000', ai }: P) {
   const a = ai || fg;
@@ -18,7 +18,7 @@ export function LogoForm({ fg = '#000000', ai }: P) {
   );
 }
 // Nur das Zeichen, ohne Fläche (für Kopfzeile, Login)
-export function Logo({ height = 32, fg = '#000000', ai, title = 'PAI' }: P & { height?: number; title?: string }) {
+export function Logo({ height = 32, fg = '#000000', ai, title = 'PSAI' }: P & { height?: number; title?: string }) {
   return (
     <svg viewBox="44 32 132 156" height={height} width={(height * 132) / 156} role="img" aria-label={title}>
       <LogoForm fg={fg} ai={ai} />

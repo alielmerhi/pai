@@ -26,7 +26,7 @@ export function Einrichtung({ fertig, vorlage, abbrechen }: { fertig: (w: Einric
   const [schritt, setSchritt] = useState(0);
   const [fehler, setFehler] = useState('');
   const [laeuft, setLaeuft] = useState(false);
-  // Phase nach dem Formular: PAI liest sich im Internet in die Branche ein
+  // Phase nach dem Formular: PSAI liest sich im Internet in die Branche ein
   const [lernen, setLernen] = useState<null | { status: 'laeuft' | 'fertig' | 'fehler'; werte: Einrichtungswerte; wissen?: Wissen; fehler?: string; suchen?: string[] }>(null);
   const [lernIdx, setLernIdx] = useState(0);
   useEffect(() => { if (lernen?.status !== 'laeuft') return; setLernIdx(0); const t = setInterval(() => setLernIdx(i => Math.min(i + 1, LERNSCHRITTE.length - 1)), 7000); return () => clearInterval(t); }, [lernen?.status]);
@@ -43,7 +43,7 @@ export function Einrichtung({ fertig, vorlage, abbrechen }: { fertig: (w: Einric
   async function abschliessen(wissen: Wissen | null) { if (!lernen) return; setLaeuft(true); try { await fertig(lernen.werte, wissen); } finally { setLaeuft(false); } }
   const v = vorlage;
   const [w, setW] = useState({
-    name: v?.name || '', beruf: v?.beruf || '', branche: v ? (BEKANNT.includes(v.branche) ? v.branche : v.branche ? 'Sonstiges' : '') : '', brancheEigen: v && !BEKANNT.includes(v.branche) ? v.branche : '', assistent: v?.assistent || 'PAI',
+    name: v?.name || '', beruf: v?.beruf || '', branche: v ? (BEKANNT.includes(v.branche) ? v.branche : v.branche ? 'Sonstiges' : '') : '', brancheEigen: v && !BEKANNT.includes(v.branche) ? v.branche : '', assistent: v?.assistent || 'PSAI',
     start_strasse: v?.start.strasse || '', start_plz: v?.start.plz || '', start_ort: v?.start.ort || '',
     zeitmodell: (v?.zeitmodell || 'fest') as 'fest' | 'flexibel',
     arbeitsbeginn: v?.arbeitsbeginn || '09:00', arbeitsende: v?.arbeitsende || '18:00', termin_dauer: v?.terminDauer || 60, puffer: v?.puffer ?? 15,
@@ -69,7 +69,7 @@ export function Einrichtung({ fertig, vorlage, abbrechen }: { fertig: (w: Einric
     if (schritt < 2) { setSchritt(schritt + 1); window.scrollTo({ top: 0 }); return; }
     const werte: Einrichtungswerte = {
         name: w.name.trim(), beruf: w.beruf.trim(), branche: w.branche === 'Sonstiges' ? w.brancheEigen.trim() || 'Sonstiges' : w.branche,
-        assistent: w.assistent.trim() || 'PAI', start_strasse: w.start_strasse.trim(), start_plz: w.start_plz.trim(), start_ort: w.start_ort.trim(),
+        assistent: w.assistent.trim() || 'PSAI', start_strasse: w.start_strasse.trim(), start_plz: w.start_plz.trim(), start_ort: w.start_ort.trim(),
         zeitmodell: w.zeitmodell, arbeitsbeginn: w.arbeitsbeginn, arbeitsende: w.arbeitsende, termin_dauer: w.termin_dauer, puffer: w.puffer, freie_tage: w.freie_tage,
         arbeitsweise: zeilen(w.ablauf), nervt: [...w.nervt, ...zeilen(w.nervtEigen)], regeln: zeilen(w.regeln),
     };
@@ -91,7 +91,7 @@ export function Einrichtung({ fertig, vorlage, abbrechen }: { fertig: (w: Einric
         </div>}
         {lernen.status === 'fertig' && lernen.wissen && <div className="lernen">
           <h1>Fertig eingelesen</h1>
-          <p className="setup-lead">Das habe ich über deine Arbeit gelernt. Stimmt etwas nicht oder fehlt etwas? Tipp auf „Bearbeiten“ – du kannst es auch später unter „Mein PAI“ ändern.</p>
+          <p className="setup-lead">Das habe ich über deine Arbeit gelernt. Stimmt etwas nicht oder fehlt etwas? Tipp auf „Bearbeiten“ – du kannst es auch später unter „Mein PSAI“ ändern.</p>
           <WissenEditor text={lernen.wissen.text} speichern={t => setLernen(l => (l && l.wissen ? { ...l, wissen: { ...l.wissen, text: t } } : l))} />
           {lernen.wissen.quellen.length > 0 && <div className="quellen">Quellen: {lernen.wissen.quellen.map((q, i) => <a key={i} href={q.url} target="_blank" rel="noopener noreferrer">{q.titel}</a>)}</div>}
           <div className="setup-aktionen"><button className="btn primary gross" disabled={laeuft} onClick={() => abschliessen(lernen.wissen!)}>Zum Chat</button></div>
@@ -113,7 +113,7 @@ export function Einrichtung({ fertig, vorlage, abbrechen }: { fertig: (w: Einric
       <div className="setup-col">
         <div className="setup-kopf"><Logo height={40} fg="#000000" /><span className="test">Testdaten</span></div>
         <h1>{v ? 'Profil bearbeiten' : 'Richte deinen Assistenten ein'}</h1>
-        <p className="setup-lead">{v ? 'Deine Kontakte und Notizen bleiben erhalten.' : 'Damit PAI so arbeitet wie du. Dauert zwei Minuten, alles bleibt auf diesem Gerät.'}</p>
+        <p className="setup-lead">{v ? 'Deine Kontakte und Notizen bleiben erhalten.' : 'Damit PSAI so arbeitet wie du. Dauert zwei Minuten, alles bleibt auf diesem Gerät.'}</p>
         <ol className="fortschritt" aria-label="Fortschritt">
           {SCHRITTE.map((s, i) => <li key={s} className={i === schritt ? 'jetzt' : i < schritt ? 'fertig' : ''}><span>{i + 1}</span>{s}</li>)}
         </ol>

@@ -24,13 +24,13 @@ const KONTAKT_FELDER = {
 };
 const PROFIL_FELDER = {
   name: { type: 'string', description: 'Vorname des Nutzers' }, beruf: S_, branche: S_,
-  assistent: { type: 'string', description: 'Name, den der Nutzer seinem Assistenten gibt (Standard PAI)' },
+  assistent: { type: 'string', description: 'Name, den der Nutzer seinem Assistenten gibt (Standard PSAI)' },
   start_strasse: S_, start_plz: S_, start_ort: { type: 'string', description: 'Wo der Arbeitstag beginnt (Büro oder Zuhause)' },
   zeitmodell: { type: 'string', enum: ['fest', 'flexibel'], description: 'fest = feste Arbeitszeiten; flexibel = arbeitet nur, wenn Kunden Termine haben' },
   arbeitsbeginn: { type: 'string', description: 'HH:MM; bei flexibel: frühester Terminbeginn' }, arbeitsende: { type: 'string', description: 'HH:MM; bei flexibel: spätestes Terminende' },
   termin_dauer: { type: 'number', description: 'übliche Termindauer in Minuten' }, puffer: { type: 'number', description: 'Minuten Puffer zwischen Terminen' },
   freie_tage: { type: 'array', items: { type: 'string', enum: TAG_LANG }, description: 'Tage ohne Termine' },
-  arbeitsweise: { ...L_, description: 'Abläufe in den Worten des Nutzers' }, regeln: { ...L_, description: 'feste Wünsche, wie PAI arbeiten soll' },
+  arbeitsweise: { ...L_, description: 'Abläufe in den Worten des Nutzers' }, regeln: { ...L_, description: 'feste Wünsche, wie PSAI arbeiten soll' },
   nervt: { ...L_, description: 'was heute am meisten Zeit kostet' },
 };
 
@@ -58,7 +58,7 @@ export const TOOLS = [
   { name: 'mail_entwurf', description: 'E-Mail-Entwurf als Karte. Du schreibst Betreff und Text; der Nutzer kopiert und sendet selbst.', input_schema: { type: 'object', properties: { ...K, an: S_, betreff: S_, text: S_ }, required: ['betreff', 'text'] } },
   { name: 'kontaktkarte', description: 'Kontaktkarte (vCard) zum Speichern im Telefonbuch anzeigen.', input_schema: { type: 'object', properties: K, required: ['kontakt'] } },
   { name: 'kontakt_loeschen', description: 'Kontakt mit allen Notizen löschen. Nur nach ausdrücklicher Bestätigung.', input_schema: { type: 'object', properties: { ...K, bestaetigt: B_ }, required: ['kontakt', 'bestaetigt'] } },
-  { name: 'beispieldaten_laden', description: 'Erfundene Beispielkontakte mit Notizen und Terminen laden, damit der Nutzer PAI ausprobieren kann. Nur auf Wunsch.', input_schema: { type: 'object', properties: {} } },
+  { name: 'beispieldaten_laden', description: 'Erfundene Beispielkontakte mit Notizen und Terminen laden, damit der Nutzer PSAI ausprobieren kann. Nur auf Wunsch.', input_schema: { type: 'object', properties: {} } },
 ];
 
 // ---------- Hilfen ----------
@@ -371,7 +371,7 @@ export function ausfuehren(name: string, i: any, ctx: Ctx): unknown {
       return { geloescht: nrS(k) };
     }
     case 'beispieldaten_laden': {
-      if (S.kontakte.length) throw new Error('Es gibt schon Kontakte – Beispieldaten nur in einem leeren PAI.');
+      if (S.kontakte.length) throw new Error('Es gibt schon Kontakte – Beispieldaten nur in einem leeren PSAI.');
       beispiele(ctx); act('Beispieldaten geladen (erfunden)');
       return { geladen: S.kontakte.map(k => `${nrS(k)} ${fullName(k)}`), termine_morgen: S.termine.length };
     }
