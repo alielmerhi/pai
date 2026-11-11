@@ -3,15 +3,15 @@
 <plist version="1.0">
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>PSAI nutzt das Mikrofon, damit du Notizen nach Kundenterminen diktieren kannst.</string>
+	<string>PMAI nutzt das Mikrofon, damit du Notizen nach Kundenterminen diktieren kannst.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>PSAI wandelt dein Diktat in Text um, damit es in der Kundenakte landet.</string>
+	<string>PMAI wandelt dein Diktat in Text um, damit es in der Kundenakte landet.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>de</string>
   <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDisplayName</key>
-        <string>PSAI</string>
+        <string>PMAI</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

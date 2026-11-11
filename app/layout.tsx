@@ -2,9 +2,9 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
-  title: 'PSAI',
+  title: 'PMAI',
   description: 'Dein zweites Gehirn für die Arbeit mit Kunden',
-  appleWebApp: { capable: true, title: 'PSAI', statusBarStyle: 'default' },
+  appleWebApp: { capable: true, title: 'PMAI', statusBarStyle: 'default' },
   robots: { index: false, follow: false },
 };
 export const viewport: Viewport = {

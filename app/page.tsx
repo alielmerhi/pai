@@ -34,7 +34,7 @@ function begruessung(S: State): UiMsg {
   const gruss = h >= 5 && h < 11 ? 'Guten Morgen' : h >= 11 && h < 18 ? 'Guten Tag' : 'Guten Abend';
   if (!S.profil.eingerichtet) return { role: 'ai', acts: [], cards: [], text: '' };
   if (!S.kontakte.length && !S.termine.length) return { role: 'ai', acts: [], cards: [], text:
-    `${gruss}, ${S.profil.name}. Ich bin ${S.profil.assistent || 'PSAI'} und arbeite ab jetzt so, wie du es eingerichtet hast.\n\nSo nutzt du mich am besten:\n\n1. **Neuer Kunde?** Füg die Mail oder Signatur ein – ich lege den Kontakt an.\n2. **Nach dem Termin?** Tipp aufs Mikrofon und erzähl, wie es war – ich merke mir alles.\n3. **Unterwegs?** Frag „Wie fahre ich morgen?“ – ich plane die Route.\n\nWillst du erst mit erfundenen Beispielkunden ausprobieren?`,
+    `${gruss}, ${S.profil.name}. Ich bin ${S.profil.assistent || 'PMAI'} und arbeite ab jetzt so, wie du es eingerichtet hast.\n\nSo nutzt du mich am besten:\n\n1. **Neuer Kunde?** Füg die Mail oder Signatur ein – ich lege den Kontakt an.\n2. **Nach dem Termin?** Tipp aufs Mikrofon und erzähl, wie es war – ich merke mir alles.\n3. **Unterwegs?** Frag „Wie fahre ich morgen?“ – ich plane die Route.\n\nWillst du erst mit erfundenen Beispielkunden ausprobieren?`,
     knoepfe: [{ key: 'beispiele', label: 'Beispieldaten laden', text: 'Beispieldaten laden' }, { key: 'erster-kontakt', label: 'Ersten Kontakt anlegen', text: 'Ich möchte einen neuen Kontakt anlegen.' }] };
   const heute = termineAm(S, jetzt).filter(t => +new Date(t.start) > +jetzt).length;
   const morgen = termineAm(S, new Date(+jetzt + 864e5)).length;
@@ -223,7 +223,7 @@ export default function Chat() {
   function neuStart() {
     if (!resetArm) { setResetArm(true); setTimeout(() => setResetArm(false), 3000); return; }
     stopDiktat(); try { localStorage.removeItem(HKEY); } catch {} const s = leererState(); speichern(s); setS(s); api.current = []; localStorage.removeItem(AKEY);
-    setMsgs([begruessung(s)]); setResetArm(false); zeige('PSAI neu gestartet');
+    setMsgs([begruessung(s)]); setResetArm(false); zeige('PMAI neu gestartet');
   }
 
   const mobil = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
@@ -265,16 +265,16 @@ export default function Chat() {
     <div className="chat">
       <header className="top"><div className="col">
         <div className="mark"><Logo height={34} fg="#000000" /><span className="test">Testdaten</span></div>
-        <div className="kopf-rechts"><button className="reset" onClick={() => setPanel(true)}>Mein {S?.profil.assistent || 'PSAI'}</button>
+        <div className="kopf-rechts"><button className="reset" onClick={() => setPanel(true)}>Mein {S?.profil.assistent || 'PMAI'}</button>
         <button className={'reset' + (resetArm ? ' arm' : '')} onClick={neuStart}>{resetArm ? 'Alles löschen? Nochmal tippen' : 'Neu starten'}</button></div>
       </div></header>
       <main className="feed" ref={feed}><div className="col"><div className="msgs">
         {msgs.map((m, i) => m.role === 'user'
           ? <UserNachricht key={i} text={m.text} />
           : <div key={i} className="m-ai">
-              <div className="who">{S?.profil?.assistent || 'PSAI'}</div>
+              <div className="who">{S?.profil?.assistent || 'PMAI'}</div>
               {m.acts.length > 0 && <ul className="acts">{m.acts.map((a, j) => <li key={j} className={a.err ? 'err' : ''}>{a.t}</li>)}</ul>}
-              {m.busy && !m.text && <div className="thinking" aria-label="PSAI denkt"><span>·</span><span>·</span><span>·</span></div>}
+              {m.busy && !m.text && <div className="thinking" aria-label="PMAI denkt"><span>·</span><span>·</span><span>·</span></div>}
               {m.text && <div className="txt md"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ node, ...p }) => <a {...p} target="_blank" rel="noopener noreferrer" /> }}>{m.text}</ReactMarkdown></div>}
               {m.quellen && m.quellen.length > 0 && <div className="quellen">Quellen: {m.quellen.slice(0, 6).map((q, j) => <a key={j} href={q.url} target="_blank" rel="noopener noreferrer">{q.titel}</a>)}</div>}
               {m.cards.map((c, j) => c.type === 'mail' ? <MailKarte key={j} c={c} zeige={zeige} /> : c.type === 'ics' ? <KalenderKarte key={j} c={c} /> : c.type === 'navi' ? <NaviKarte key={j} c={c} /> : c.type === 'route' ? <RoutenKarte key={j} c={c} /> : <KontaktKarte key={j} c={c} zeige={zeige} />)}
@@ -287,18 +287,18 @@ export default function Chat() {
           {diktatMoeglich && <button type="button" className={'mic' + (hoert ? ' an' : '')} onClick={() => (hoert ? stopDiktat() : startDiktat())} aria-label={hoert ? 'Diktat beenden' : 'Diktieren'} title={hoert ? 'Diktat beenden' : 'Diktieren'}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
           </button>}
-          <textarea ref={ta} rows={1} value={input} placeholder={hoert ? 'Ich höre zu …' : 'Nachricht, Mail oder Notiz'} aria-label="Nachricht an PSAI"
+          <textarea ref={ta} rows={1} value={input} placeholder={hoert ? 'Ich höre zu …' : 'Nachricht, Mail oder Notiz'} aria-label="Nachricht an PMAI"
             onChange={e => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; }}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !mobil) { e.preventDefault(); senden(input); } }} />
           <button className="send" disabled={busy || !input.trim()} aria-label="Senden">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
           </button>
         </form>
-        <p className="note">Nur Testdaten. Alles bleibt auf diesem Gerät. PSAI sendet nichts selbst. <span className="ver">Version {process.env.NEXT_PUBLIC_VERSION}</span></p>
+        <p className="note">Nur Testdaten. Alles bleibt auf diesem Gerät. PMAI sendet nichts selbst. <span className="ver">Version {process.env.NEXT_PUBLIC_VERSION}</span></p>
       </div></footer>
-      {panel && S && <div className="panel" role="dialog" aria-label="Mein PSAI">
+      {panel && S && <div className="panel" role="dialog" aria-label="Mein PMAI">
         <div className="panel-col">
-          <div className="panel-kopf"><h2>Mein {S.profil.assistent || 'PSAI'}</h2><button className="btn ghost" onClick={() => setPanel(false)}>Schließen</button></div>
+          <div className="panel-kopf"><h2>Mein {S.profil.assistent || 'PMAI'}</h2><button className="btn ghost" onClick={() => setPanel(false)}>Schließen</button></div>
           <section>
             <h3>Profil</h3>
             <dl className="profil">

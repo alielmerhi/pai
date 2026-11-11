@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-// PSAI liest sich vor dem ersten Chat in die Branche des Nutzers ein (Websuche).
+// PMAI liest sich vor dem ersten Chat in die Branche des Nutzers ein (Websuche).
 // Übertragen werden nur Beruf, Branche und Arbeitsweise – keine Kundendaten.
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -8,7 +8,7 @@ export const maxDuration = 120;
 const client = new Anthropic();
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
 
-const AUFTRAG = `Du bist PSAI, ein persönlicher Assistent für Menschen, die mit Kunden arbeiten. Bevor du mit deinem neuen Nutzer startest, bildest du dich zu seinem Beruf und seiner Branche – so, wie sich eine gute neue Assistenz vor dem ersten Arbeitstag einliest.
+const AUFTRAG = `Du bist PMAI, ein persönlicher Assistent für Menschen, die mit Kunden arbeiten. Bevor du mit deinem neuen Nutzer startest, bildest du dich zu seinem Beruf und seiner Branche – so, wie sich eine gute neue Assistenz vor dem ersten Arbeitstag einliest.
 
 Recherchiere mit der Websuche (Deutschland, aktueller Stand) und schreibe danach ein kompaktes Briefing für dich selbst, auf Deutsch, höchstens 350 Wörter, genau mit diesen Abschnitten als "### "-Überschriften:
 ### So läuft ein Kundenkontakt typisch ab

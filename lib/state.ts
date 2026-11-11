@@ -38,7 +38,7 @@ export type State = {
 };
 
 export const LEERES_PROFIL: Profil = {
-  eingerichtet: false, name: '', beruf: '', branche: '', assistent: 'PSAI',
+  eingerichtet: false, name: '', beruf: '', branche: '', assistent: 'PMAI',
   start: { strasse: '', plz: '', ort: '' },
   zeitmodell: 'fest', arbeitsbeginn: '09:00', arbeitsende: '18:00', terminDauer: 60, puffer: 15, freieTage: [0, 6],
   arbeitsweise: [], regeln: [], nervt: [],
@@ -62,7 +62,7 @@ export function laden(): State | null {
   try {
     const s = localStorage.getItem(KEY); if (!s) return null;
     const o = JSON.parse(s);
-    if (o?.v === 2) { o.profil = { ...structuredClone(LEERES_PROFIL), ...o.profil }; if (o.profil.assistent === 'PAI') o.profil.assistent = 'PSAI'; o.aenderungen ||= []; o.zug ||= 0; return o; }
+    if (o?.v === 2) { o.profil = { ...structuredClone(LEERES_PROFIL), ...o.profil }; if (['PAI', 'PSAI'].includes(o.profil.assistent)) o.profil.assistent = 'PMAI'; o.aenderungen ||= []; o.zug ||= 0; return o; }
   } catch {}
   return null;
 }

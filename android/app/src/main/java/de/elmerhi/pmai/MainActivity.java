@@ -1,4 +1,4 @@
-package de.elmerhi.psai;
+package de.elmerhi.pmai;
 
 import com.getcapacitor.BridgeActivity;
 

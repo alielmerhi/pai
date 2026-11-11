@@ -1,4 +1,4 @@
-// PSAI denkt mit: passende nächste Schritte als Knöpfe – nach jeder Aktion und zum richtigen Zeitpunkt.
+// PMAI denkt mit: passende nächste Schritte als Knöpfe – nach jeder Aktion und zum richtigen Zeitpunkt.
 // Feste Regeln, keine KI. Höchstens zwei Knöpfe; was nie genutzt wird, verschwindet.
 import { State, Kontakt, fullName, nrS } from './state';
 import { termineAm, ende, besteReihenfolge, tagesroute } from './planung';
